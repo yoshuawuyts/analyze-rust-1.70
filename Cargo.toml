@@ -1,0 +1,20 @@
+[package]
+name = "analyze-stdlib"
+version = "1.0.0"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/yoshuawuyts/analyze-stdlib"
+documentation = "https://docs.rs/analyze-stdlib"
+description = "Analyze the items in the stdlib"
+readme = "README.md"
+edition = "2018"
+keywords = []
+categories = []
+authors = [
+    "Yoshua Wuyts <rust@yosh.is>"
+]
+
+[features]
+
+[dependencies]
+
+[dev-dependencies]
