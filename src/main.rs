@@ -16,13 +16,43 @@ use rustdoc_types::{
     GenericBound, GenericParamDefKind, ItemEnum, Term, TraitBoundModifier, Type, WherePredicate,
 };
 
+fn main() -> io::Result<()> {
+    let file = fs::read_to_string("assets/core.json")?;
+    let krate = Crate::from_str(&file)?;
+    println!("{}", krate.to_table());
+    Ok(())
+}
+
+/// A crate
 #[derive(Debug, PartialEq, PartialOrd, Default)]
-struct Crate {
+pub struct Crate {
     traits: Vec<Trait>,
     structs: Vec<Struct>,
     enums: Vec<Enum>,
+    functions: Vec<Function>,
 }
 impl Crate {
+    /// Create a new instance from a string slice.
+    pub fn from_str(s: &str) -> io::Result<Self> {
+        let krate: rustdoc_types::Crate = serde_json::from_str(&s)?;
+        let db = Database::new(krate);
+        let modules = db.modules();
+
+        let mut output = Crate::default();
+        for (path_name, module) in modules {
+            // Find traits
+            for (trait_name, trait_) in db.find_traits(&module.items) {
+                let decl = format_trait(&trait_name, &trait_);
+                output.traits.push(Trait {
+                    name: trait_name,
+                    has_generics: trait_has_generics(&trait_),
+                    path: path_name.clone(),
+                    decl,
+                });
+            }
+        }
+        Ok(output)
+    }
     /// Output the contents of the crate as a table
     pub fn to_table(&self) -> String {
         use cli_table::{Cell, Style, Table};
@@ -34,6 +64,7 @@ impl Crate {
                     "trait".cell(),
                     format!("{}::{}", t.path, t.name).cell(),
                     t.decl.clone().cell(),
+                    t.has_generics.cell(),
                 ]
             })
             .collect::<Vec<_>>();
@@ -43,6 +74,7 @@ impl Crate {
                 "Kind".cell().bold(true),
                 "Name".cell().bold(true),
                 "Signature".cell().bold(true),
+                "Generics?".cell().bold(true),
             ])
             .display()
             .unwrap()
@@ -55,7 +87,7 @@ struct Trait {
     name: String,
     path: String,
     decl: String,
-    methods: Vec<Method>,
+    has_generics: bool,
 }
 
 #[derive(Debug, PartialEq, PartialOrd)]
@@ -63,7 +95,6 @@ struct Enum {
     name: String,
     path: String,
     decl: String,
-    methods: Vec<Method>,
 }
 
 #[derive(Debug, PartialEq, PartialOrd)]
@@ -71,11 +102,10 @@ struct Struct {
     name: String,
     path: String,
     decl: String,
-    methods: Vec<Method>,
 }
 
 #[derive(Debug, PartialEq, PartialOrd)]
-struct Method {
+struct Function {
     name: String,
     path: String,
     decl: String,
@@ -140,27 +170,21 @@ impl Database {
     }
 }
 
-fn main() -> io::Result<()> {
-    let file = fs::read_to_string("assets/core.json")?;
-    let krate: rustdoc_types::Crate = serde_json::from_str(&file)?;
-    let db = Database::new(krate);
-    let modules = db.modules();
+fn trait_has_generics(trait_: &rustdoc_types::Trait) -> bool {
+    let params = &trait_
+        .generics
+        .params
+        .iter()
+        .filter(|p| !matches!(p.kind, GenericParamDefKind::Lifetime { .. }))
+        .count();
 
-    let mut output = Crate::default();
-    for (path_name, module) in modules {
-        // Find traits
-        for (trait_name, trait_) in db.find_traits(&module.items) {
-            let decl = format_trait(&trait_name, &trait_);
-            output.traits.push(Trait {
-                name: trait_name,
-                path: path_name.clone(),
-                decl,
-                methods: vec![],
-            });
-        }
-    }
-    println!("{}", output.to_table());
-    Ok(())
+    let wheres = &trait_
+        .generics
+        .where_predicates
+        .iter()
+        .filter(|p| matches!(p, WherePredicate::BoundPredicate { .. }))
+        .count();
+    (params + wheres) != 0
 }
 
 fn format_trait(name: &str, trait_: &rustdoc_types::Trait) -> String {
