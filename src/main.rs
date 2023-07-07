@@ -22,6 +22,33 @@ struct Crate {
     structs: Vec<Struct>,
     enums: Vec<Enum>,
 }
+impl Crate {
+    /// Output the contents of the crate as a table
+    pub fn to_table(&self) -> String {
+        use cli_table::{Cell, Style, Table};
+        let output = self
+            .traits
+            .iter()
+            .map(|t| {
+                vec![
+                    "trait".cell(),
+                    format!("{}::{}", t.path, t.name).cell(),
+                    t.decl.clone().cell(),
+                ]
+            })
+            .collect::<Vec<_>>();
+        output
+            .table()
+            .title(vec![
+                "Kind".cell().bold(true),
+                "Name".cell().bold(true),
+                "Signature".cell().bold(true),
+            ])
+            .display()
+            .unwrap()
+            .to_string()
+    }
+}
 
 #[derive(Debug, PartialEq, PartialOrd)]
 struct Trait {
@@ -124,7 +151,6 @@ fn main() -> io::Result<()> {
         // Find traits
         for (trait_name, trait_) in db.find_traits(&module.items) {
             let decl = format_trait(&trait_name, &trait_);
-            println!("{path_name} {decl}");
             output.traits.push(Trait {
                 name: trait_name,
                 path: path_name.clone(),
@@ -133,6 +159,7 @@ fn main() -> io::Result<()> {
             });
         }
     }
+    println!("{}", output.to_table());
     Ok(())
 }
 
