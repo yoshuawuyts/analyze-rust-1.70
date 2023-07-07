@@ -12,7 +12,9 @@
 
 use std::{fs, io};
 
-use rustdoc_types::{GenericBound, GenericParamDefKind, ItemEnum, TraitBoundModifier, Type};
+use rustdoc_types::{
+    GenericBound, GenericParamDefKind, ItemEnum, Term, TraitBoundModifier, Type, WherePredicate,
+};
 
 #[derive(Debug, PartialEq, PartialOrd, Default)]
 struct Crate {
@@ -23,6 +25,7 @@ struct Crate {
 
 #[derive(Debug, PartialEq, PartialOrd)]
 struct Trait {
+    name: String,
     path: String,
     decl: String,
     methods: Vec<Method>,
@@ -30,6 +33,7 @@ struct Trait {
 
 #[derive(Debug, PartialEq, PartialOrd)]
 struct Enum {
+    name: String,
     path: String,
     decl: String,
     methods: Vec<Method>,
@@ -37,6 +41,7 @@ struct Enum {
 
 #[derive(Debug, PartialEq, PartialOrd)]
 struct Struct {
+    name: String,
     path: String,
     decl: String,
     methods: Vec<Method>,
@@ -44,6 +49,7 @@ struct Struct {
 
 #[derive(Debug, PartialEq, PartialOrd)]
 struct Method {
+    name: String,
     path: String,
     decl: String,
 }
@@ -118,8 +124,9 @@ fn main() -> io::Result<()> {
         // Find traits
         for (trait_name, trait_) in db.find_traits(&module.items) {
             let decl = format_trait(&trait_name, &trait_);
-            println!("{decl}");
+            println!("{path_name} {decl}");
             output.traits.push(Trait {
+                name: trait_name,
                 path: path_name.clone(),
                 decl,
                 methods: vec![],
@@ -132,16 +139,18 @@ fn main() -> io::Result<()> {
 fn format_trait(name: &str, trait_: &rustdoc_types::Trait) -> String {
     let is_auto = if trait_.is_auto { "auto " } else { "" };
     let is_unsafe = if trait_.is_unsafe { "unsafe " } else { "" };
-    let params = format_generic_params(&trait_.generics);
-    format!("{is_unsafe}{is_auto}trait {name}{params} {{ }}")
+    let params = format_generic_params(&trait_.generics.params);
+    let where_bounds = format_where_bounds(&trait_.generics.where_predicates);
+    let trait_bounds = format_generic_bounds(&trait_.bounds);
+    format!("{is_unsafe}{is_auto}trait {name}{params}{trait_bounds} {where_bounds}{{ }}")
 }
 
-fn format_generic_params(generics: &rustdoc_types::Generics) -> String {
+fn format_generic_params(params: &[rustdoc_types::GenericParamDef]) -> String {
     let mut out = vec![];
-    for param in &generics.params {
+    for param in params {
         let name = &param.name;
         match &param.kind {
-            GenericParamDefKind::Lifetime { outlives } => continue,
+            GenericParamDefKind::Lifetime { outlives: _ } => continue,
             GenericParamDefKind::Type {
                 bounds,
                 default,
@@ -195,33 +204,48 @@ fn format_generic_bounds(bounds: &[GenericBound]) -> String {
     }
 }
 
-fn format_where_bounds(generics: rustdoc_types::Generics) -> String {
-    todo!()
+fn format_where_bounds(predicates: &[WherePredicate]) -> String {
+    let mut out = vec![];
+    for pred in predicates {
+        match pred {
+            WherePredicate::BoundPredicate {
+                type_,
+                bounds,
+                generic_params: _, // TODO: HRTBs
+            } => out.push(format!(
+                "{}: {}",
+                format_type(type_),
+                format_generic_bounds(bounds)
+            )),
+            WherePredicate::RegionPredicate {
+                lifetime: _,
+                bounds: _,
+            } => todo!(), // TODO: lifetimes
+            WherePredicate::EqPredicate { lhs, rhs } => {
+                out.push(format!("{} = {}", format_type(lhs), format_term(rhs)))
+            }
+        }
+    }
+    match out.len() {
+        0 => String::new(),
+        _ => format!("where {}", out.join(", ")),
+    }
 }
 
 fn format_type(ty: &Type) -> String {
     match ty {
-        Type::ResolvedPath(_) => todo!(),
-        Type::DynTrait(_) => todo!(),
         Type::Generic(generic) => generic.clone(),
-        Type::Primitive(_) => todo!(),
-        Type::FunctionPointer(_) => todo!(),
-        Type::Tuple(_) => todo!(),
-        Type::Slice(_) => todo!(),
-        Type::Array { type_, len } => todo!(),
-        Type::ImplTrait(_) => todo!(),
-        Type::Infer => todo!(),
-        Type::RawPointer { mutable, type_ } => todo!(),
-        Type::BorrowedRef {
-            lifetime: _,
-            mutable,
-            type_,
-        } => todo!(),
-        Type::QualifiedPath {
-            name,
-            args,
-            self_type,
-            trait_,
-        } => todo!(),
+        ty => format!("<cannot format type: {ty:?}>"),
     }
+}
+
+fn format_term(term: &Term) -> String {
+    match term {
+        Term::Type(ty) => format_type(ty),
+        Term::Constant(c) => format_constant(c),
+    }
+}
+
+fn format_constant(_c: &rustdoc_types::Constant) -> String {
+    format!("todo: format constants")
 }
