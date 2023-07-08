@@ -7,16 +7,23 @@
 use std::io;
 
 use rustdoc_types::{
-    GenericBound, GenericParamDefKind, ItemEnum, Term, TraitBoundModifier, Type, WherePredicate,
+    GenericBound, GenericParamDefKind, Term, TraitBoundModifier, Type, WherePredicate,
 };
+
+mod database;
+use database::Database;
 
 /// A crate
 #[derive(Debug, PartialEq, PartialOrd, Default)]
 pub struct Crate {
-    traits: Vec<Trait>,
-    structs: Vec<Struct>,
-    enums: Vec<Enum>,
-    functions: Vec<Function>,
+    /// Traits contained in this crate
+    pub traits: Vec<Trait>,
+    /// Structs contained in this crate
+    pub structs: Vec<Struct>,
+    /// Enums contained in this crate
+    pub enums: Vec<Enum>,
+    /// Functions and methods contained in this crate
+    pub functions: Vec<Function>,
 }
 impl Crate {
     /// Create a new instance from a string slice.
@@ -83,100 +90,64 @@ impl Crate {
     }
 }
 
+/// A trait
 #[derive(Debug, PartialEq, PartialOrd)]
-struct Trait {
-    name: String,
-    path: String,
-    decl: String,
-    has_generics: bool,
-    stability: Stability,
+pub struct Trait {
+    /// The name
+    pub name: String,
+    /// The path without the name
+    pub path: String,
+    /// The signature of the item
+    pub decl: String,
+    /// Does this item have generics?
+    pub has_generics: bool,
+    /// What is the stability of this item?
+    pub stability: Stability,
 }
 
+/// An enum
 #[derive(Debug, PartialEq, PartialOrd)]
-struct Enum {
-    name: String,
-    path: String,
-    decl: String,
-    has_generics: bool,
+pub struct Enum {
+    /// The name
+    pub name: String,
+    /// The path without the name
+    pub path: String,
+    /// The signature of the item
+    pub decl: String,
+    /// Does this item have generics?
+    pub has_generics: bool,
+    /// What is the stability of this item?
+    pub stability: Stability,
 }
 
+/// A struct
 #[derive(Debug, PartialEq, PartialOrd)]
-struct Struct {
-    name: String,
-    path: String,
-    decl: String,
-    has_generics: bool,
+pub struct Struct {
+    /// The name
+    pub name: String,
+    /// The path without the name
+    pub path: String,
+    /// The signature of the item
+    pub decl: String,
+    /// Does this item have generics?
+    pub has_generics: bool,
+    /// What is the stability of this item?
+    pub stability: Stability,
 }
 
+/// A function
 #[derive(Debug, PartialEq, PartialOrd)]
-struct Function {
-    name: String,
-    path: String,
-    decl: String,
-    has_generics: bool,
-}
-
-/// Internal rustdoc database structure with various query methods on it.
-struct Database {
-    inner: rustdoc_types::Crate,
-}
-
-impl Database {
-    /// Create a new instance of database
-    fn new(inner: rustdoc_types::Crate) -> Self {
-        Self { inner }
-    }
-
-    /// Find a rustdoc `Item` by id
-    fn find_item(&self, id: &rustdoc_types::Id) -> Option<rustdoc_types::Item> {
-        let item = self.inner.index.get(id)?;
-        Some(item.clone())
-    }
-
-    /// Find a rustdoc path by id.
-    fn find_path(&self, id: &rustdoc_types::Id) -> Option<String> {
-        let summary = self.inner.paths.get(id)?;
-        Some(summary.path.join("::"))
-    }
-
-    /// Get a list of all modules
-    fn modules(&self) -> Vec<(String, rustdoc_types::Module)> {
-        let mut out: Vec<_> = self
-            .inner
-            .index
-            .iter()
-            .filter_map(|(id, item)| match &item.inner {
-                ItemEnum::Module(module) => {
-                    if module.is_stripped {
-                        return None;
-                    }
-                    let path = self.find_path(id)?;
-                    Some((path, module.clone()))
-                }
-                _ => None,
-            })
-            .collect();
-        out.sort_by(|(left, _), (right, _)| left.cmp(right));
-        out
-    }
-
-    /// Given a list of IDs, find all traits. A rustdoc module only
-    /// provides a `Vec<Id>` for all items in it, so we have to do a filter-find
-    /// to narrow it down to just traits, etc.
-    fn find_traits(
-        &self,
-        ids: &[rustdoc_types::Id],
-    ) -> Vec<(rustdoc_types::Item, rustdoc_types::Trait)> {
-        ids.into_iter()
-            .filter_map(|id| {
-                self.find_item(id)
-                    .and_then(|item| match item.clone().inner {
-                        ItemEnum::Trait(adt) => Some((item, adt)),
-                        _ => None,
-                    })
-            })
-            .collect()
-    }
+pub struct Function {
+    /// The name
+    pub name: String,
+    /// The path without the name
+    pub path: String,
+    /// The signature of the item
+    pub decl: String,
+    /// Does this item have generics?
+    pub has_generics: bool,
+    /// What is the stability of this item?
+    pub stability: Stability,
 }
 
 fn trait_has_generics(trait_: &rustdoc_types::Trait) -> bool {
@@ -310,9 +281,12 @@ fn format_constant(_c: &rustdoc_types::Constant) -> String {
     format!("todo: format constants")
 }
 
+/// What is the stability of this item?
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
-enum Stability {
+pub enum Stability {
+    /// The item is stable
     Stable,
+    /// The item is unstable
     Unstable,
 }
 
