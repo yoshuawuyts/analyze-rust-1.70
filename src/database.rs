@@ -76,4 +76,48 @@ impl Database {
             })
             .collect()
     }
+
+    pub(crate) fn find_structs(
+        &self,
+        ids: &[rustdoc_types::Id],
+    ) -> Vec<(rustdoc_types::Item, rustdoc_types::Struct)> {
+        ids.into_iter()
+            .filter_map(|id| {
+                self.find_item(id)
+                    .and_then(|item| match item.clone().inner {
+                        ItemEnum::Struct(strukt) => Some((item, strukt)),
+                        _ => None,
+                    })
+            })
+            .collect()
+    }
+    pub(crate) fn find_enums(
+        &self,
+        ids: &[rustdoc_types::Id],
+    ) -> Vec<(rustdoc_types::Item, rustdoc_types::Enum)> {
+        ids.into_iter()
+            .filter_map(|id| {
+                self.find_item(id)
+                    .and_then(|item| match item.clone().inner {
+                        ItemEnum::Enum(enum_) => Some((item, enum_)),
+                        _ => None,
+                    })
+            })
+            .collect()
+    }
+
+    pub(crate) fn find_impls(
+        &self,
+        ids: &[rustdoc_types::Id],
+    ) -> Vec<(rustdoc_types::Item, rustdoc_types::Impl)> {
+        ids.into_iter()
+            .filter_map(|id| {
+                self.find_item(id)
+                    .and_then(|item| match item.clone().inner {
+                        ItemEnum::Impl(impl_) => Some((item, impl_)),
+                        _ => None,
+                    })
+            })
+            .collect()
+    }
 }

@@ -45,7 +45,9 @@ impl Crate {
         for (path_name, module) in modules {
             let items = &module.items;
             output.parse_traits(&db, items, &path_name);
-            output.parse_functions(&db, items, &path_name);
+            output.parse_functions(&db, items, &path_name, false);
+            output.parse_structs(&db, items, &path_name);
+            output.parse_enums(&db, items, &path_name);
         }
 
         Ok(output)
@@ -68,13 +70,14 @@ impl Crate {
         for (item, trait_) in db.find_traits(items) {
             let trait_name = item.name.unwrap();
             let decl = format_trait(&trait_name, &trait_);
+            let has_generics = has_generics(&trait_.generics);
 
             let fn_path = format!("{path_name}::{}", &trait_name);
-            let fn_count = self.parse_functions(db, &trait_.items, &fn_path);
+            let fn_count = self.parse_functions(db, &trait_.items, &fn_path, has_generics);
 
             self.traits.push(Trait {
                 name: trait_name.clone(),
-                has_generics: has_generics(&trait_.generics),
+                has_generics,
                 path: path_name.to_string(),
                 stability: parse_stability(&item.attrs),
                 fn_count,
@@ -83,11 +86,69 @@ impl Crate {
         }
     }
 
+    fn parse_structs(&mut self, db: &Database, items: &[rustdoc_types::Id], path_name: &str) {
+        for (item, strukt) in db.find_structs(items) {
+            let trait_name = item.name.unwrap();
+            let decl = format_struct(&trait_name, &strukt);
+            let has_generics = has_generics(&strukt.generics);
+
+            let strukt_path = format!("{path_name}::{}", &trait_name);
+            let fn_count = self.parse_inherent_impls(db, &strukt.impls, &strukt_path);
+
+            self.structs.push(Struct {
+                name: trait_name.clone(),
+                has_generics,
+                path: path_name.to_string(),
+                stability: parse_stability(&item.attrs),
+                fn_count,
+                decl,
+            });
+        }
+    }
+
+    fn parse_enums(&mut self, db: &Database, items: &[rustdoc_types::Id], path_name: &str) {
+        for (item, enum_) in db.find_enums(items) {
+            let trait_name = item.name.unwrap();
+            let decl = format_enum(&trait_name, &enum_);
+
+            let enum_path = format!("{path_name}::{}", &trait_name);
+            let fn_count = self.parse_inherent_impls(db, &enum_.impls, &enum_path);
+
+            self.enums.push(Enum {
+                name: trait_name.clone(),
+                has_generics: has_generics(&enum_.generics),
+                path: path_name.to_string(),
+                stability: parse_stability(&item.attrs),
+                fn_count,
+                decl,
+            });
+        }
+    }
+
+    fn parse_inherent_impls(
+        &mut self,
+        db: &Database,
+        items: &[rustdoc_types::Id],
+        path_name: &str,
+    ) -> usize {
+        let mut count = 0;
+        for (_item, impl_) in db.find_impls(items) {
+            // We're only interested in inherent impls
+            if impl_.trait_.is_some() || impl_.synthetic || impl_.blanket_impl.is_some() {
+                continue;
+            }
+            let has_generics = has_generics(&impl_.generics);
+            count += self.parse_functions(db, &impl_.items, &path_name, has_generics);
+        }
+        count
+    }
+
     fn parse_functions(
         &mut self,
         db: &Database,
         items: &[rustdoc_types::Id],
         path_name: &str,
+        parent_has_generics: bool,
     ) -> usize {
         let mut count = 0;
         for (item, fn_) in db.find_functions(&items) {
@@ -95,7 +156,7 @@ impl Crate {
             let function_name = item.name.unwrap();
             self.functions.push(Function {
                 name: function_name.clone(),
-                has_generics: has_generics(&fn_.generics),
+                has_generics: has_generics(&fn_.generics) || parent_has_generics,
                 path: path_name.to_owned(),
                 stability: parse_stability(&item.attrs),
                 decl: format_function(&function_name, &fn_),
@@ -187,10 +248,13 @@ fn has_generics(generics: &rustdoc_types::Generics) -> bool {
 }
 
 fn format_function(name: &str, fn_: &rustdoc_types::Function) -> String {
+    if name == "merge_sort" {
+        return format!("<merge sort is unstable and annoyingly complicated>");
+    }
     let is_const = if fn_.header.const_ { "const " } else { "" };
     let is_unsafe = if fn_.header.const_ { "unsafe " } else { "" };
     let is_async = if fn_.header.async_ { "async " } else { "" };
-    let body = if fn_.has_body { "{}" } else { ";" };
+    let body = if fn_.has_body { " { .. }" } else { ";" };
     let output = match &fn_.decl.output {
         Some(ty) => format!(" -> {}", format_type(&ty)),
         None => String::new(),
@@ -216,6 +280,18 @@ fn format_trait(name: &str, trait_: &rustdoc_types::Trait) -> String {
     format!("{is_unsafe}{is_auto}trait {name}{params}{trait_bounds} {where_bounds}{{ }}")
 }
 
+fn format_struct(name: &str, strukt: &rustdoc_types::Struct) -> String {
+    let params = format_generic_params(&strukt.generics.params);
+    let where_bounds = format_where_bounds(&strukt.generics.where_predicates);
+    format!("struct {name}{params} {where_bounds} {{ .. }}")
+}
+
+fn format_enum(name: &str, strukt: &rustdoc_types::Enum) -> String {
+    let params = format_generic_params(&strukt.generics.params);
+    let where_bounds = format_where_bounds(&strukt.generics.where_predicates);
+    format!("enum {name}{params} {where_bounds} {{ .. }}")
+}
+
 fn format_generic_params(params: &[rustdoc_types::GenericParamDef]) -> String {
     let mut out = vec![];
     for param in params {
@@ -225,11 +301,11 @@ fn format_generic_params(params: &[rustdoc_types::GenericParamDef]) -> String {
             GenericParamDefKind::Type {
                 bounds,
                 default,
-                synthetic,
+                synthetic: _,
             } => {
-                if *synthetic {
-                    continue;
-                }
+                // if *synthetic {
+                //     continue;
+                // }
                 let bounds = format_generic_bounds(&bounds);
                 let default = match default {
                     Some(ty) => format!(" = {}", format_type(ty)),
@@ -346,6 +422,8 @@ fn format_type(ty: &Type) -> String {
                 .collect();
             format!("dyn {}", traits.join(" + "))
         }
+        Type::ImplTrait(bounds) => format!("impl {}", format_generic_bounds(&bounds)),
+        Type::Array { type_, len } => format!("[{}; {len}]", format_type(type_)),
         ty => format!("todo format type: {ty:?}>"),
     }
 }

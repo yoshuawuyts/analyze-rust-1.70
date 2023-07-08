@@ -38,7 +38,7 @@ impl std::fmt::Debug for Stats {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "total: {: >3}, stable: {: >3}, unstable: {: >3}, generics: {: >3}",
+            "total: {: >4}, stable: {: >4}, unstable: {: >4}, generics: {: >4}",
             &self.total, &self.stable, &self.unstable, &self.generics
         )
     }
