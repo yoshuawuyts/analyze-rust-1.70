@@ -17,9 +17,14 @@ use rustdoc_types::{
 };
 
 fn main() -> io::Result<()> {
-    let file = fs::read_to_string("assets/core.json")?;
-    let krate = Crate::from_str(&file)?;
-    println!("{}", krate.to_table());
+    let mut core = Crate::from_str(&fs::read_to_string("assets/core.json")?)?;
+    let mut alloc = Crate::from_str(&fs::read_to_string("assets/alloc.json")?)?;
+    let mut std = Crate::from_str(&fs::read_to_string("assets/std.json")?)?;
+
+    core.append(&mut alloc);
+    core.append(&mut std);
+
+    println!("{}", core.to_table());
     Ok(())
 }
 
@@ -53,6 +58,15 @@ impl Crate {
         }
         Ok(output)
     }
+
+    /// Move all items from `other` into `self` leaving `other` empty
+    pub fn append(&mut self, other: &mut Self) {
+        self.traits.append(&mut other.traits);
+        self.structs.append(&mut other.structs);
+        self.enums.append(&mut other.enums);
+        self.functions.append(&mut other.functions);
+    }
+
     /// Output the contents of the crate as a table
     pub fn to_table(&self) -> String {
         use cli_table::{Cell, Style, Table};
