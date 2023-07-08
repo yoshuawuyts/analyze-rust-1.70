@@ -61,4 +61,19 @@ impl Database {
             })
             .collect()
     }
+
+    pub(crate) fn find_functions(
+        &self,
+        ids: &[rustdoc_types::Id],
+    ) -> Vec<(rustdoc_types::Item, rustdoc_types::Function)> {
+        ids.into_iter()
+            .filter_map(|id| {
+                self.find_item(id)
+                    .and_then(|item| match item.clone().inner {
+                        ItemEnum::Function(fn_) => Some((item, fn_)),
+                        _ => None,
+                    })
+            })
+            .collect()
+    }
 }

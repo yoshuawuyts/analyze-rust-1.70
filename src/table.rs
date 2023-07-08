@@ -1,5 +1,5 @@
-use cli_table::{Cell, Style, Table};
-pub(crate) fn to_table(krate: &super::Crate) -> String {
+use cli_table::{Cell, Style, Table, TableDisplay};
+pub(crate) fn to_table(krate: &super::Crate) -> TableDisplay {
     let mut output = krate
         .traits
         .iter()
@@ -10,6 +10,7 @@ pub(crate) fn to_table(krate: &super::Crate) -> String {
                 t.decl.clone().cell(),
                 t.has_generics.cell(),
                 t.stability.cell(),
+                format!("{}", t.fn_count).cell(),
             ]
         })
         .collect::<Vec<_>>();
@@ -25,6 +26,7 @@ pub(crate) fn to_table(krate: &super::Crate) -> String {
                     t.decl.clone().cell(),
                     t.has_generics.cell(),
                     t.stability.cell(),
+                    format!("{}", t.fn_count).cell(),
                 ]
             })
             .collect::<Vec<_>>(),
@@ -41,6 +43,7 @@ pub(crate) fn to_table(krate: &super::Crate) -> String {
                     t.decl.clone().cell(),
                     t.has_generics.cell(),
                     t.stability.cell(),
+                    format!("{}", t.fn_count).cell(),
                 ]
             })
             .collect::<Vec<_>>(),
@@ -57,6 +60,7 @@ pub(crate) fn to_table(krate: &super::Crate) -> String {
                     t.decl.clone().cell(),
                     t.has_generics.cell(),
                     t.stability.cell(),
+                    0.cell(),
                 ]
             })
             .collect::<Vec<_>>(),
@@ -69,8 +73,8 @@ pub(crate) fn to_table(krate: &super::Crate) -> String {
             "Signature".cell().bold(true),
             "Generics?".cell().bold(true),
             "Stability".cell().bold(true),
+            "Methods".cell().bold(true),
         ])
         .display()
         .unwrap()
-        .to_string()
 }

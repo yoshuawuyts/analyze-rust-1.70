@@ -6,6 +6,7 @@
 
 use std::io;
 
+use cli_table::TableDisplay;
 use rustdoc_types::{
     GenericBound, GenericParamDefKind, Term, TraitBoundModifier, Type, WherePredicate,
 };
@@ -43,7 +44,8 @@ impl Crate {
 
         for (path_name, module) in modules {
             let items = &module.items;
-            output.parse_traits(&db, items, path_name);
+            output.parse_traits(&db, items, &path_name);
+            output.parse_functions(&db, items, &path_name);
         }
 
         Ok(output)
@@ -58,23 +60,48 @@ impl Crate {
     }
 
     /// Output the contents of the crate as a table
-    pub fn to_table(&self) -> String {
+    pub fn to_table(&self) -> TableDisplay {
         table::to_table(self)
     }
 
-    fn parse_traits(&mut self, db: &Database, items: &[rustdoc_types::Id], path_name: String) {
+    fn parse_traits(&mut self, db: &Database, items: &[rustdoc_types::Id], path_name: &str) {
         for (item, trait_) in db.find_traits(items) {
             let trait_name = item.name.unwrap();
             let decl = format_trait(&trait_name, &trait_);
+
+            let fn_path = format!("{path_name}::{}", &trait_name);
+            let fn_count = self.parse_functions(db, &trait_.items, &fn_path);
+
             self.traits.push(Trait {
-                name: trait_name,
-                has_generics: trait_has_generics(&trait_),
-                path: path_name.clone(),
+                name: trait_name.clone(),
+                has_generics: has_generics(&trait_.generics),
+                path: path_name.to_string(),
                 stability: parse_stability(&item.attrs),
+                fn_count,
                 decl,
             });
-            // TODO: find functions
         }
+    }
+
+    fn parse_functions(
+        &mut self,
+        db: &Database,
+        items: &[rustdoc_types::Id],
+        path_name: &str,
+    ) -> usize {
+        let mut count = 0;
+        for (item, fn_) in db.find_functions(&items) {
+            count += 1;
+            let function_name = item.name.unwrap();
+            self.functions.push(Function {
+                name: function_name.clone(),
+                has_generics: has_generics(&fn_.generics),
+                path: path_name.to_owned(),
+                stability: parse_stability(&item.attrs),
+                decl: format_function(&function_name, &fn_),
+            });
+        }
+        count
     }
 }
 
@@ -91,6 +118,8 @@ pub struct Trait {
     pub has_generics: bool,
     /// What is the stability of this item?
     pub stability: Stability,
+    /// How many methods does this item have?
+    pub fn_count: usize,
 }
 
 /// An enum
@@ -106,6 +135,8 @@ pub struct Enum {
     pub has_generics: bool,
     /// What is the stability of this item?
     pub stability: Stability,
+    /// How many methods does this item have?
+    pub fn_count: usize,
 }
 
 /// A struct
@@ -121,6 +152,8 @@ pub struct Struct {
     pub has_generics: bool,
     /// What is the stability of this item?
     pub stability: Stability,
+    /// How many methods does this item have?
+    pub fn_count: usize,
 }
 
 /// A function
@@ -138,21 +171,40 @@ pub struct Function {
     pub stability: Stability,
 }
 
-fn trait_has_generics(trait_: &rustdoc_types::Trait) -> bool {
-    let params = &trait_
-        .generics
+fn has_generics(generics: &rustdoc_types::Generics) -> bool {
+    let params = &generics
         .params
         .iter()
         .filter(|p| !matches!(p.kind, GenericParamDefKind::Lifetime { .. }))
         .count();
 
-    let wheres = &trait_
-        .generics
+    let wheres = &generics
         .where_predicates
         .iter()
         .filter(|p| matches!(p, WherePredicate::BoundPredicate { .. }))
         .count();
     (params + wheres) != 0
+}
+
+fn format_function(name: &str, fn_: &rustdoc_types::Function) -> String {
+    let is_const = if fn_.header.const_ { "const " } else { "" };
+    let is_unsafe = if fn_.header.const_ { "unsafe " } else { "" };
+    let is_async = if fn_.header.async_ { "async " } else { "" };
+    let body = if fn_.has_body { "{}" } else { ";" };
+    let output = match &fn_.decl.output {
+        Some(ty) => format!(" -> {}", format_type(&ty)),
+        None => String::new(),
+    };
+    let args = &fn_
+        .decl
+        .inputs
+        .iter()
+        .map(|(name, ty)| format!("{name}: {}", format_type(ty)))
+        .collect::<Vec<_>>();
+    let args = args.join(", ");
+    let params = format_generic_params(&fn_.generics.params);
+    let where_bounds = format_where_bounds(&fn_.generics.where_predicates);
+    format!("{is_const}{is_unsafe}{is_async}fn {name}{params}({args}){output}{where_bounds}{body}")
 }
 
 fn format_trait(name: &str, trait_: &rustdoc_types::Trait) -> String {
@@ -232,7 +284,7 @@ fn format_where_bounds(predicates: &[WherePredicate]) -> String {
                 bounds,
                 generic_params: _, // TODO: HRTBs
             } => out.push(format!(
-                "{}: {}",
+                "{}{}",
                 format_type(type_),
                 format_generic_bounds(bounds)
             )),
@@ -247,14 +299,54 @@ fn format_where_bounds(predicates: &[WherePredicate]) -> String {
     }
     match out.len() {
         0 => String::new(),
-        _ => format!("where {}", out.join(", ")),
+        _ => format!(" where {}", out.join(", ")),
     }
 }
 
 fn format_type(ty: &Type) -> String {
     match ty {
         Type::Generic(generic) => generic.clone(),
-        ty => format!("<cannot format type: {ty:?}>"),
+        Type::QualifiedPath {
+            name,
+            args: _, // TODO: unsure what this is
+            self_type,
+            trait_: _, // TODO: I believe this is `<x as trait_>` bounds?
+        } => {
+            format!("{}::{name}", format_type(self_type))
+        }
+        Type::BorrowedRef {
+            lifetime,
+            mutable,
+            type_,
+        } => {
+            let lifetime = match lifetime {
+                Some(lt) => lt.clone(),
+                None => String::new(),
+            };
+            let mutable = if *mutable { " mut" } else { "" };
+            format!("&{lifetime}{mutable} {}", format_type(type_))
+        }
+        Type::Primitive(ty) => ty.to_owned(),
+        Type::ResolvedPath(path) => path.name.clone(),
+        Type::Tuple(data) => {
+            let output: Vec<_> = data.iter().map(|ty| format_type(ty)).collect();
+            output.join(", ")
+        }
+        Type::Slice(ty) => format_type(ty),
+        Type::RawPointer { mutable, type_ } => match mutable {
+            true => format!("*mut {}", format_type(type_)),
+            false => format!("*const {}", format_type(type_)),
+        },
+        Type::FunctionPointer(_ptr) => format!("<todo: fn pointer>"),
+        Type::DynTrait(dyn_trait) => {
+            let traits: Vec<_> = dyn_trait
+                .traits
+                .iter()
+                .map(|t| t.trait_.name.clone())
+                .collect();
+            format!("dyn {}", traits.join(" + "))
+        }
+        ty => format!("todo format type: {ty:?}>"),
     }
 }
 
@@ -288,10 +380,10 @@ impl std::fmt::Display for Stability {
 }
 
 fn parse_stability(attrs: &[String]) -> Stability {
-    let mut val = Stability::Stable;
+    let mut val = Stability::Unstable;
     for attr in attrs {
-        if attr.starts_with("#[unstable") {
-            val = Stability::Unstable;
+        if attr.starts_with("#[stable") {
+            val = Stability::Stable;
         }
     }
     val

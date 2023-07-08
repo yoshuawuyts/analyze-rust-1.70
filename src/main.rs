@@ -12,13 +12,56 @@ fn main() -> io::Result<()> {
     core.append(&mut std);
 
     println!("{}", core.to_table());
-    let trait_count = core.traits.len();
-    let unstable_trait_count = core
-        .traits
-        .iter()
-        .filter(|t| matches!(t.stability, Stability::Unstable))
-        .count();
-    let stable_trait_count = trait_count - unstable_trait_count;
-    println!("trait count: {trait_count}, stable: {stable_trait_count}, unstable: {unstable_trait_count}");
+
+    let stats = Stats::from_iter(core.traits.iter().map(|t| (t.stability, t.has_generics)));
+    println!("{: <10} {stats:?}", "traits");
+
+    let stats = Stats::from_iter(core.functions.iter().map(|t| (t.stability, t.has_generics)));
+    println!("{: <10} {stats:?}", "functions");
+
+    let stats = Stats::from_iter(core.structs.iter().map(|t| (t.stability, t.has_generics)));
+    println!("{: <10} {stats:?}", "structs");
+
+    let stats = Stats::from_iter(core.enums.iter().map(|t| (t.stability, t.has_generics)));
+    println!("{: <10} {stats:?}", "enums");
     Ok(())
+}
+
+struct Stats {
+    total: usize,
+    stable: usize,
+    unstable: usize,
+    generics: usize,
+}
+
+impl std::fmt::Debug for Stats {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "total: {: >3}, stable: {: >3}, unstable: {: >3}, generics: {: >3}",
+            &self.total, &self.stable, &self.unstable, &self.generics
+        )
+    }
+}
+
+impl Stats {
+    fn from_iter(iter: impl Iterator<Item = (Stability, bool)>) -> Self {
+        let mut this = Self {
+            total: 0,
+            stable: 0,
+            unstable: 0,
+            generics: 0,
+        };
+        for (stability, has_generics) in iter {
+            this.total += 1;
+            match stability {
+                Stability::Stable => this.stable += 1,
+                Stability::Unstable => this.unstable += 1,
+            }
+            if has_generics {
+                this.generics += 1;
+            }
+        }
+        this
+    }
 }
