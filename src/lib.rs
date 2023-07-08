@@ -11,6 +11,7 @@ use rustdoc_types::{
 };
 
 mod database;
+mod table;
 use database::Database;
 
 /// A crate
@@ -25,6 +26,7 @@ pub struct Crate {
     /// Functions and methods contained in this crate
     pub functions: Vec<Function>,
 }
+
 impl Crate {
     /// Create a new instance from a string slice.
     pub fn from_str(s: &str) -> io::Result<Self> {
@@ -32,22 +34,18 @@ impl Crate {
         let db = Database::new(krate);
         let modules = db.modules();
 
-        let mut output = Crate::default();
+        let mut output = Self {
+            traits: vec![],
+            structs: vec![],
+            enums: vec![],
+            functions: vec![],
+        };
+
         for (path_name, module) in modules {
-            // Find traits
-            for (item, trait_) in db.find_traits(&module.items) {
-                let trait_name = item.name.unwrap();
-                let decl = format_trait(&trait_name, &trait_);
-                output.traits.push(Trait {
-                    name: trait_name,
-                    has_generics: trait_has_generics(&trait_),
-                    path: path_name.clone(),
-                    stability: parse_stability(&item.attrs),
-                    decl,
-                });
-                // TODO: find functions
-            }
+            let items = &module.items;
+            output.parse_traits(&db, items, path_name);
         }
+
         Ok(output)
     }
 
@@ -61,32 +59,22 @@ impl Crate {
 
     /// Output the contents of the crate as a table
     pub fn to_table(&self) -> String {
-        use cli_table::{Cell, Style, Table};
-        let output = self
-            .traits
-            .iter()
-            .map(|t| {
-                vec![
-                    "trait".cell(),
-                    format!("{}::{}", t.path, t.name).cell(),
-                    t.decl.clone().cell(),
-                    t.has_generics.cell(),
-                    t.stability.cell(),
-                ]
-            })
-            .collect::<Vec<_>>();
-        output
-            .table()
-            .title(vec![
-                "Kind".cell().bold(true),
-                "Name".cell().bold(true),
-                "Signature".cell().bold(true),
-                "Generics?".cell().bold(true),
-                "Stability".cell().bold(true),
-            ])
-            .display()
-            .unwrap()
-            .to_string()
+        table::to_table(self)
+    }
+
+    fn parse_traits(&mut self, db: &Database, items: &[rustdoc_types::Id], path_name: String) {
+        for (item, trait_) in db.find_traits(items) {
+            let trait_name = item.name.unwrap();
+            let decl = format_trait(&trait_name, &trait_);
+            self.traits.push(Trait {
+                name: trait_name,
+                has_generics: trait_has_generics(&trait_),
+                path: path_name.clone(),
+                stability: parse_stability(&item.attrs),
+                decl,
+            });
+            // TODO: find functions
+        }
     }
 }
 
