@@ -28,12 +28,14 @@ impl Crate {
         let mut output = Crate::default();
         for (path_name, module) in modules {
             // Find traits
-            for (trait_name, trait_) in db.find_traits(&module.items) {
+            for (item, trait_) in db.find_traits(&module.items) {
+                let trait_name = item.name.unwrap();
                 let decl = format_trait(&trait_name, &trait_);
                 output.traits.push(Trait {
                     name: trait_name,
                     has_generics: trait_has_generics(&trait_),
                     path: path_name.clone(),
+                    stability: parse_stability(&item.attrs),
                     decl,
                 });
                 // TODO: find functions
@@ -62,6 +64,7 @@ impl Crate {
                     format!("{}::{}", t.path, t.name).cell(),
                     t.decl.clone().cell(),
                     t.has_generics.cell(),
+                    t.stability.cell(),
                 ]
             })
             .collect::<Vec<_>>();
@@ -72,6 +75,7 @@ impl Crate {
                 "Name".cell().bold(true),
                 "Signature".cell().bold(true),
                 "Generics?".cell().bold(true),
+                "Stability".cell().bold(true),
             ])
             .display()
             .unwrap()
@@ -85,6 +89,7 @@ struct Trait {
     path: String,
     decl: String,
     has_generics: bool,
+    stability: Stability,
 }
 
 #[derive(Debug, PartialEq, PartialOrd)]
@@ -158,13 +163,17 @@ impl Database {
     /// Given a list of IDs, find all traits. A rustdoc module only
     /// provides a `Vec<Id>` for all items in it, so we have to do a filter-find
     /// to narrow it down to just traits, etc.
-    fn find_traits(&self, ids: &[rustdoc_types::Id]) -> Vec<(String, rustdoc_types::Trait)> {
+    fn find_traits(
+        &self,
+        ids: &[rustdoc_types::Id],
+    ) -> Vec<(rustdoc_types::Item, rustdoc_types::Trait)> {
         ids.into_iter()
             .filter_map(|id| {
-                self.find_item(id).and_then(|item| match item.inner {
-                    ItemEnum::Trait(adt) => Some((item.name.unwrap(), adt)),
-                    _ => None,
-                })
+                self.find_item(id)
+                    .and_then(|item| match item.clone().inner {
+                        ItemEnum::Trait(adt) => Some((item, adt)),
+                        _ => None,
+                    })
             })
             .collect()
     }
@@ -299,4 +308,29 @@ fn format_term(term: &Term) -> String {
 
 fn format_constant(_c: &rustdoc_types::Constant) -> String {
     format!("todo: format constants")
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+enum Stability {
+    Stable,
+    Unstable,
+}
+
+impl std::fmt::Display for Stability {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Stable => write!(f, "stable"),
+            Self::Unstable => write!(f, "unstable"),
+        }
+    }
+}
+
+fn parse_stability(attrs: &[String]) -> Stability {
+    let mut val = Stability::Stable;
+    for attr in attrs {
+        if attr.starts_with("#[unstable") {
+            val = Stability::Unstable;
+        }
+    }
+    val
 }
