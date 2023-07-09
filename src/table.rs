@@ -1,5 +1,5 @@
-use cli_table::{Cell, Style, Table, TableDisplay};
-pub(crate) fn to_table(krate: &super::Crate) -> TableDisplay {
+use cli_table::{Cell, Style, Table, TableStruct};
+pub(crate) fn to_table(krate: &super::Crate) -> TableStruct {
     let mut output = krate
         .traits
         .iter()
@@ -65,16 +65,12 @@ pub(crate) fn to_table(krate: &super::Crate) -> TableDisplay {
             })
             .collect::<Vec<_>>(),
     );
-    output
-        .table()
-        .title(vec![
-            "Kind".cell().bold(true),
-            "Name".cell().bold(true),
-            "Signature".cell().bold(true),
-            "Generics?".cell().bold(true),
-            "Stability".cell().bold(true),
-            "Methods".cell().bold(true),
-        ])
-        .display()
-        .unwrap()
+    output.table().title(vec![
+        "Kind".cell().bold(true),
+        "Name".cell().bold(true),
+        "Signature".cell().bold(true),
+        "Generics?".cell().bold(true),
+        "Stability".cell().bold(true),
+        "Methods".cell().bold(true),
+    ])
 }

@@ -2,16 +2,54 @@ use rustdoc_denormalize::Crate;
 use rustdoc_denormalize::Stability;
 use std::fs;
 use std::io;
+use structopt::StructOpt;
+
+#[derive(structopt::StructOpt)]
+enum Opts {
+    /// Output a table
+    Table,
+    /// Output a CSV
+    Csv,
+}
 
 fn main() -> io::Result<()> {
-    let mut core = Crate::from_str(&fs::read_to_string("assets/core.json")?)?;
+    let mut krate = Crate::from_str(&fs::read_to_string("assets/core.json")?)?;
     let mut alloc = Crate::from_str(&fs::read_to_string("assets/alloc.json")?)?;
     let mut std = Crate::from_str(&fs::read_to_string("assets/std.json")?)?;
 
-    core.append(&mut alloc);
-    core.append(&mut std);
+    krate.append(&mut alloc);
+    krate.append(&mut std);
+    let table = krate.to_table();
 
-    println!("{}", core.to_table());
+    match Opts::from_args() {
+        Opts::Table => print_table(table, krate),
+        Opts::Csv => print_csv(krate),
+    }
+}
+
+fn print_csv(krate: Crate) -> Result<(), io::Error> {
+    let mut writer = csv::Writer::from_writer(io::stdout());
+    krate
+        .structs
+        .into_iter()
+        .for_each(|t| writer.serialize(t).unwrap());
+    krate
+        .enums
+        .into_iter()
+        .for_each(|t| writer.serialize(t).unwrap());
+    krate
+        .traits
+        .into_iter()
+        .for_each(|t| writer.serialize(t).unwrap());
+    krate
+        .functions
+        .into_iter()
+        .for_each(|t| writer.serialize(t).unwrap());
+    Ok(())
+}
+
+fn print_table(table: cli_table::TableStruct, core: Crate) -> Result<(), io::Error> {
+    println!("{}", table.display()?);
 
     let stats = Stats::from_iter(core.traits.iter().map(|t| (t.stability, t.has_generics)));
     println!("{: <10} {stats:?}", "traits");

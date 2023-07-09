@@ -1,15 +1,16 @@
 //! Denormalize rustdoc output
 
-#![forbid(unsafe_code, rust_2018_idioms)]
+#![forbid(unsafe_code)]
 #![deny(missing_debug_implementations, nonstandard_style)]
 #![warn(missing_docs, future_incompatible, unreachable_pub)]
 
 use std::io;
 
-use cli_table::TableDisplay;
+use cli_table::TableStruct;
 use rustdoc_types::{
     GenericBound, GenericParamDefKind, Term, TraitBoundModifier, Type, WherePredicate,
 };
+use serde::{Deserialize, Serialize};
 
 mod database;
 mod table;
@@ -62,7 +63,7 @@ impl Crate {
     }
 
     /// Output the contents of the crate as a table
-    pub fn to_table(&self) -> TableDisplay {
+    pub fn to_table(&self) -> TableStruct {
         table::to_table(self)
     }
 
@@ -70,12 +71,13 @@ impl Crate {
         for (item, trait_) in db.find_traits(items) {
             let trait_name = item.name.unwrap();
             let decl = format_trait(&trait_name, &trait_);
-            let has_generics = has_generics(&trait_.generics);
+            let has_generics = contains_generics(&trait_.generics);
 
             let fn_path = format!("{path_name}::{}", &trait_name);
             let fn_count = self.parse_functions(db, &trait_.items, &fn_path, has_generics);
 
             self.traits.push(Trait {
+                kind: "trait",
                 name: trait_name.clone(),
                 has_generics,
                 path: path_name.to_string(),
@@ -90,12 +92,13 @@ impl Crate {
         for (item, strukt) in db.find_structs(items) {
             let trait_name = item.name.unwrap();
             let decl = format_struct(&trait_name, &strukt);
-            let has_generics = has_generics(&strukt.generics);
+            let has_generics = contains_generics(&strukt.generics);
 
             let strukt_path = format!("{path_name}::{}", &trait_name);
             let fn_count = self.parse_inherent_impls(db, &strukt.impls, &strukt_path);
 
             self.structs.push(Struct {
+                kind: "struct",
                 name: trait_name.clone(),
                 has_generics,
                 path: path_name.to_string(),
@@ -115,8 +118,9 @@ impl Crate {
             let fn_count = self.parse_inherent_impls(db, &enum_.impls, &enum_path);
 
             self.enums.push(Enum {
+                kind: "enum",
                 name: trait_name.clone(),
-                has_generics: has_generics(&enum_.generics),
+                has_generics: contains_generics(&enum_.generics),
                 path: path_name.to_string(),
                 stability: parse_stability(&item.attrs),
                 fn_count,
@@ -137,7 +141,7 @@ impl Crate {
             if impl_.trait_.is_some() || impl_.synthetic || impl_.blanket_impl.is_some() {
                 continue;
             }
-            let has_generics = has_generics(&impl_.generics);
+            let has_generics = contains_generics(&impl_.generics);
             count += self.parse_functions(db, &impl_.items, &path_name, has_generics);
         }
         count
@@ -155,11 +159,13 @@ impl Crate {
             count += 1;
             let function_name = item.name.unwrap();
             self.functions.push(Function {
+                kind: "function",
                 name: function_name.clone(),
-                has_generics: has_generics(&fn_.generics) || parent_has_generics,
+                has_generics: contains_generics(&fn_.generics) || parent_has_generics,
                 path: path_name.to_owned(),
                 stability: parse_stability(&item.attrs),
                 decl: format_function(&function_name, &fn_),
+                fn_count: 0,
             });
         }
         count
@@ -167,8 +173,10 @@ impl Crate {
 }
 
 /// A trait
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct Trait {
+    /// What kind of item is this?
+    pub kind: &'static str,
     /// The name
     pub name: String,
     /// The path without the name
@@ -184,8 +192,10 @@ pub struct Trait {
 }
 
 /// An enum
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct Enum {
+    /// What kind of item is this?
+    pub kind: &'static str,
     /// The name
     pub name: String,
     /// The path without the name
@@ -201,8 +211,10 @@ pub struct Enum {
 }
 
 /// A struct
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct Struct {
+    /// What kind of item is this?
+    pub kind: &'static str,
     /// The name
     pub name: String,
     /// The path without the name
@@ -218,8 +230,10 @@ pub struct Struct {
 }
 
 /// A function
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct Function {
+    /// What kind of item is this?
+    pub kind: &'static str,
     /// The name
     pub name: String,
     /// The path without the name
@@ -230,9 +244,11 @@ pub struct Function {
     pub has_generics: bool,
     /// What is the stability of this item?
     pub stability: Stability,
+    /// How many methods does this item have?
+    pub fn_count: usize,
 }
 
-fn has_generics(generics: &rustdoc_types::Generics) -> bool {
+fn contains_generics(generics: &rustdoc_types::Generics) -> bool {
     let params = &generics
         .params
         .iter()
@@ -440,7 +456,7 @@ fn format_constant(_c: &rustdoc_types::Constant) -> String {
 }
 
 /// What is the stability of this item?
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Serialize, Deserialize)]
 pub enum Stability {
     /// The item is stable
     Stable,
