@@ -8,7 +8,7 @@ use std::io;
 
 use cli_table::TableStruct;
 use rustdoc_types::{
-    GenericBound, GenericParamDefKind, Term, TraitBoundModifier, Type, WherePredicate,
+    GenericBound, GenericParamDefKind, Id, Term, TraitBoundModifier, Type, WherePredicate,
 };
 use serde::{Deserialize, Serialize};
 
@@ -94,12 +94,14 @@ impl Crate {
     }
 
     fn parse_structs(&mut self, db: &Database, items: &[rustdoc_types::Id], path_name: &str) {
+        // dbg!(items.contains(&Id(String::from("0:3663:9709"))));
         for (item, strukt) in db.find_structs(items) {
-            let trait_name = item.name.unwrap();
-            let decl = format_struct(&trait_name, &strukt);
+            let strukt_name = item.name.unwrap();
+            // println!("{strukt_name}");
+            let decl = format_struct(&strukt_name, &strukt);
             let has_generics = contains_generics(&strukt.generics);
 
-            let strukt_path = format!("{path_name}::{}", &trait_name);
+            let strukt_path = format!("{path_name}::{}", &strukt_name);
             let fn_count = self.count_inherent_impls(db, &strukt.impls, &strukt_path);
 
             let stability = parse_stability(&item.attrs);
@@ -107,7 +109,7 @@ impl Crate {
 
             self.structs.push(Struct {
                 kind: "struct",
-                name: trait_name.clone(),
+                name: strukt_name.clone(),
                 has_generics,
                 path: path_name.to_string(),
                 stability: parse_stability(&item.attrs),

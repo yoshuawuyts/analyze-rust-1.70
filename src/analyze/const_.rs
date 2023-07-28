@@ -17,7 +17,7 @@ fn should_exclude(target: &str) -> bool {
         if state {
             return true;
         } else {
-            dbg!(&target, &pat);
+            // dbg!(&target, &pat);
             match target.contains(pat) {
                 true => true,
                 false => false,

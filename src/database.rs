@@ -31,11 +31,8 @@ impl Database {
             .iter()
             .filter_map(|(id, item)| match &item.inner {
                 ItemEnum::Module(module) => {
-                    if module.is_stripped {
-                        return None;
-                    }
                     let path = self.find_path(id)?;
-                    Some((path, module.clone()))
+                    Some((dbg!(path), module.clone()))
                 }
                 _ => None,
             })
