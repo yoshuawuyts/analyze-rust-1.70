@@ -80,7 +80,6 @@ impl Crate {
             let fn_count = self.count_functions(db, &trait_.items, &fn_path, has_generics);
 
             let stability = parse_stability(&item.attrs);
-            self.parse_trait_impls(db, &trait_.implementations, path_name, stability);
 
             self.traits.push(Trait {
                 kind: "trait",
@@ -103,6 +102,9 @@ impl Crate {
             let strukt_path = format!("{path_name}::{}", &trait_name);
             let fn_count = self.count_inherent_impls(db, &strukt.impls, &strukt_path);
 
+            let stability = parse_stability(&item.attrs);
+            self.parse_trait_impls(db, &strukt.impls, path_name, stability);
+
             self.structs.push(Struct {
                 kind: "struct",
                 name: trait_name.clone(),
@@ -122,13 +124,15 @@ impl Crate {
 
             let enum_path = format!("{path_name}::{}", &trait_name);
             let fn_count = self.count_inherent_impls(db, &enum_.impls, &enum_path);
+            let stability = parse_stability(&item.attrs);
+            self.parse_trait_impls(db, &enum_.impls, path_name, stability);
 
             self.enums.push(Enum {
                 kind: "enum",
                 name: trait_name.clone(),
                 has_generics: contains_generics(&enum_.generics),
                 path: path_name.to_string(),
-                stability: parse_stability(&item.attrs),
+                stability,
                 fn_count,
                 decl,
             });
@@ -140,13 +144,37 @@ impl Crate {
         db: &Database,
         items: &[rustdoc_types::Id],
         path_name: &str,
-        stability: Stability,
+        mut stability: Stability,
     ) {
         for (_item, impl_) in db.find_impls(items) {
             let has_generics = contains_generics(&impl_.generics);
 
             // We're only interested in trait impls
             if let Some(trait_) = impl_.trait_.clone() {
+                db.find_enums(&impl_.items)
+                    .into_iter()
+                    .for_each(|(item, _)| {
+                        if let Stability::Unstable = parse_stability(&item.attrs) {
+                            stability = Stability::Unstable;
+                        }
+                    });
+                dbg!(&trait_);
+                match db.find_traits(&[trait_.id]).into_iter().next() {
+                    Some((trait_item, _)) => {
+                        if let Stability::Unstable = parse_stability(&trait_item.attrs) {
+                            stability = Stability::Unstable;
+                        }
+                    }
+                    // Assume stable stability if it's an external trait
+                    None => {}
+                }
+
+                // NOTE: The bug here is that the item is in a separate crate!
+                // External traits can be implemented in this crate.
+
+                // TODO: we should just do a name-based lookup for traits here?
+                // TODO: this requires processing crates per section, not per crate
+
                 let decl = format_impl(impl_);
                 self.impls.push(Impl {
                     kind: "impl",
