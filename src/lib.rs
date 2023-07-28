@@ -25,6 +25,8 @@ pub struct Crate {
     pub structs: Vec<Struct>,
     /// Enums contained in this crate
     pub enums: Vec<Enum>,
+    /// Impls contained in this crate
+    pub impls: Vec<Impl>,
     /// Functions and methods contained in this crate
     pub functions: Vec<Function>,
 }
@@ -40,13 +42,14 @@ impl Crate {
             traits: vec![],
             structs: vec![],
             enums: vec![],
+            impls: vec![],
             functions: vec![],
         };
 
         for (path_name, module) in modules {
             let items = &module.items;
             output.parse_traits(&db, items, &path_name);
-            output.parse_functions(&db, items, &path_name, false);
+            output.count_functions(&db, items, &path_name, false);
             output.parse_structs(&db, items, &path_name);
             output.parse_enums(&db, items, &path_name);
         }
@@ -74,14 +77,17 @@ impl Crate {
             let has_generics = contains_generics(&trait_.generics);
 
             let fn_path = format!("{path_name}::{}", &trait_name);
-            let fn_count = self.parse_functions(db, &trait_.items, &fn_path, has_generics);
+            let fn_count = self.count_functions(db, &trait_.items, &fn_path, has_generics);
+
+            let stability = parse_stability(&item.attrs);
+            self.parse_trait_impls(db, &trait_.implementations, path_name, stability);
 
             self.traits.push(Trait {
                 kind: "trait",
                 name: trait_name.clone(),
                 has_generics,
                 path: path_name.to_string(),
-                stability: parse_stability(&item.attrs),
+                stability,
                 fn_count,
                 decl,
             });
@@ -95,7 +101,7 @@ impl Crate {
             let has_generics = contains_generics(&strukt.generics);
 
             let strukt_path = format!("{path_name}::{}", &trait_name);
-            let fn_count = self.parse_inherent_impls(db, &strukt.impls, &strukt_path);
+            let fn_count = self.count_inherent_impls(db, &strukt.impls, &strukt_path);
 
             self.structs.push(Struct {
                 kind: "struct",
@@ -115,7 +121,7 @@ impl Crate {
             let decl = format_enum(&trait_name, &enum_);
 
             let enum_path = format!("{path_name}::{}", &trait_name);
-            let fn_count = self.parse_inherent_impls(db, &enum_.impls, &enum_path);
+            let fn_count = self.count_inherent_impls(db, &enum_.impls, &enum_path);
 
             self.enums.push(Enum {
                 kind: "enum",
@@ -129,7 +135,33 @@ impl Crate {
         }
     }
 
-    fn parse_inherent_impls(
+    fn parse_trait_impls(
+        &mut self,
+        db: &Database,
+        items: &[rustdoc_types::Id],
+        path_name: &str,
+        stability: Stability,
+    ) {
+        for (_item, impl_) in db.find_impls(items) {
+            let has_generics = contains_generics(&impl_.generics);
+
+            // We're only interested in trait impls
+            if let Some(trait_) = impl_.trait_.clone() {
+                let decl = format_impl(impl_);
+                self.impls.push(Impl {
+                    kind: "impl",
+                    name: trait_.name.clone(),
+                    has_generics,
+                    path: path_name.to_string(),
+                    stability,
+                    fn_count: 0,
+                    decl,
+                });
+            }
+        }
+    }
+
+    fn count_inherent_impls(
         &mut self,
         db: &Database,
         items: &[rustdoc_types::Id],
@@ -142,12 +174,12 @@ impl Crate {
                 continue;
             }
             let has_generics = contains_generics(&impl_.generics);
-            count += self.parse_functions(db, &impl_.items, &path_name, has_generics);
+            count += self.count_functions(db, &impl_.items, &path_name, has_generics);
         }
         count
     }
 
-    fn parse_functions(
+    fn count_functions(
         &mut self,
         db: &Database,
         items: &[rustdoc_types::Id],
@@ -232,6 +264,25 @@ pub struct Struct {
 /// A function
 #[derive(Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct Function {
+    /// What kind of item is this?
+    pub kind: &'static str,
+    /// The name
+    pub name: String,
+    /// The path without the name
+    pub path: String,
+    /// The signature of the item
+    pub decl: String,
+    /// Does this item have generics?
+    pub has_generics: bool,
+    /// What is the stability of this item?
+    pub stability: Stability,
+    /// How many methods does this item have?
+    pub fn_count: usize,
+}
+
+/// A struct
+#[derive(Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
+pub struct Impl {
     /// What kind of item is this?
     pub kind: &'static str,
     /// The name
@@ -383,7 +434,7 @@ fn format_where_bounds(predicates: &[WherePredicate]) -> String {
             WherePredicate::RegionPredicate {
                 lifetime: _,
                 bounds: _,
-            } => todo!(), // TODO: lifetimes
+            } => out.push(format!("todo: region predicate")),
             WherePredicate::EqPredicate { lhs, rhs } => {
                 out.push(format!("{} = {}", format_type(lhs), format_term(rhs)))
             }
@@ -444,6 +495,21 @@ fn format_type(ty: &Type) -> String {
     }
 }
 
+fn format_impl(impl_: rustdoc_types::Impl) -> String {
+    let is_unsafe = match impl_.is_unsafe {
+        true => "",
+        false => "unsafe ",
+    };
+    let trait_ = match impl_.trait_ {
+        Some(trait_) => format!("{} for ", trait_.name),
+        None => String::new(),
+    };
+    let ty = format_type(&impl_.for_);
+    let params = format_generic_params(&impl_.generics.params);
+    let where_bounds = format_where_bounds(&impl_.generics.where_predicates);
+    format!("{is_unsafe} impl{params} {trait_} {ty} {where_bounds} {{}}")
+}
+
 fn format_term(term: &Term) -> String {
     match term {
         Term::Type(ty) => format_type(ty),
@@ -476,7 +542,7 @@ impl std::fmt::Display for Stability {
 fn parse_stability(attrs: &[String]) -> Stability {
     let mut val = Stability::Unstable;
     for attr in attrs {
-        if attr.starts_with("#[stable") {
+        if attr.contains("#[stable") {
             val = Stability::Stable;
         }
     }

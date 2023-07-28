@@ -65,6 +65,23 @@ pub(crate) fn to_table(krate: &super::Crate) -> TableStruct {
             })
             .collect::<Vec<_>>(),
     );
+
+    output.append(
+        &mut krate
+            .impls
+            .iter()
+            .map(|t| {
+                vec![
+                    "impl".cell(),
+                    format!("{}::{}", t.path, t.name).cell(),
+                    t.decl.clone().cell(),
+                    t.has_generics.cell(),
+                    t.stability.cell(),
+                    0.cell(),
+                ]
+            })
+            .collect::<Vec<_>>(),
+    );
     output.table().title(vec![
         "Kind".cell().bold(true),
         "Name".cell().bold(true),

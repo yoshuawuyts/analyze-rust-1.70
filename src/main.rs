@@ -45,6 +45,10 @@ fn print_csv(krate: Crate) -> Result<(), io::Error> {
         .functions
         .into_iter()
         .for_each(|t| writer.serialize(t).unwrap());
+    krate
+        .impls
+        .into_iter()
+        .for_each(|t| writer.serialize(t).unwrap());
     Ok(())
 }
 
@@ -62,6 +66,9 @@ fn print_table(table: cli_table::TableStruct, core: Crate) -> Result<(), io::Err
 
     let stats = Stats::from_iter(core.enums.iter().map(|t| (t.stability, t.has_generics)));
     println!("{: <10} {stats:?}", "enums");
+
+    let stats = Stats::from_iter(core.impls.iter().map(|t| (t.stability, t.has_generics)));
+    println!("{: <10} {stats:?}", "impls");
     Ok(())
 }
 
