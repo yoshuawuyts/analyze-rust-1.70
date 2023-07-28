@@ -4,12 +4,16 @@ use std::fs;
 use std::io;
 use structopt::StructOpt;
 
+mod analyze;
+
 #[derive(structopt::StructOpt)]
 enum Opts {
     /// Output a table
     Table,
     /// Output a CSV
     Csv,
+    /// Generate an analysis
+    Stats,
 }
 
 fn main() -> io::Result<()> {
@@ -22,8 +26,9 @@ fn main() -> io::Result<()> {
     let table = krate.to_table();
 
     match Opts::from_args() {
-        Opts::Table => print_table(table, krate),
+        Opts::Table => print_table(table),
         Opts::Csv => print_csv(krate),
+        Opts::Stats => print_stats(krate),
     }
 }
 
@@ -52,23 +57,48 @@ fn print_csv(krate: Crate) -> Result<(), io::Error> {
     Ok(())
 }
 
-fn print_table(table: cli_table::TableStruct, core: Crate) -> Result<(), io::Error> {
+fn print_table(table: cli_table::TableStruct) -> Result<(), io::Error> {
     println!("{}", table.display()?);
+    Ok(())
+}
 
-    let stats = Stats::from_iter(core.traits.iter().map(|t| (t.stability, t.has_generics)));
-    println!("{: <10} {stats:?}", "traits");
+fn print_stats(krate: Crate) -> Result<(), io::Error> {
+    let trait_stats = Stats::from_iter(krate.traits.iter().map(|t| (t.stability, t.has_generics)));
+    println!("{: <10} {trait_stats:?}", "traits");
 
-    let stats = Stats::from_iter(core.functions.iter().map(|t| (t.stability, t.has_generics)));
-    println!("{: <10} {stats:?}", "functions");
+    let fn_stats = Stats::from_iter(
+        krate
+            .functions
+            .iter()
+            .map(|t| (t.stability, t.has_generics)),
+    );
+    println!("{: <10} {fn_stats:?}", "functions");
 
-    let stats = Stats::from_iter(core.structs.iter().map(|t| (t.stability, t.has_generics)));
-    println!("{: <10} {stats:?}", "structs");
+    let struct_stats =
+        Stats::from_iter(krate.structs.iter().map(|t| (t.stability, t.has_generics)));
+    println!("{: <10} {struct_stats:?}", "structs");
 
-    let stats = Stats::from_iter(core.enums.iter().map(|t| (t.stability, t.has_generics)));
-    println!("{: <10} {stats:?}", "enums");
+    let enum_stats = Stats::from_iter(krate.enums.iter().map(|t| (t.stability, t.has_generics)));
+    println!("{: <10} {enum_stats:?}", "enums");
 
-    let stats = Stats::from_iter(core.impls.iter().map(|t| (t.stability, t.has_generics)));
-    println!("{: <10} {stats:?}", "impls");
+    let impl_stats = Stats::from_iter(krate.impls.iter().map(|t| (t.stability, t.has_generics)));
+    println!("{: <10} {impl_stats:?}", "impls");
+
+    let adt_stats = struct_stats + enum_stats;
+    println!("{: <10} {adt_stats:?}", "ADTs");
+
+    println!("\n------\n");
+
+    println!(
+        "traits per ADT: {:.1}",
+        impl_stats.stable as f32 / adt_stats.stable as f32
+    );
+
+    let const_count = analyze::const_::count_const_functions(&krate);
+    let const_ratio = (const_count as f64 / fn_stats.stable as f64) * 100.0;
+    println!("const functions: {const_count} ({const_ratio:.1}%)",);
+
+    println!("\n------\n");
     Ok(())
 }
 
@@ -108,5 +138,17 @@ impl Stats {
             }
         }
         this
+    }
+}
+
+impl std::ops::Add for Stats {
+    type Output = Stats;
+
+    fn add(mut self, rhs: Self) -> Self::Output {
+        self.total += rhs.total;
+        self.stable += rhs.stable;
+        self.unstable += rhs.unstable;
+        self.generics += rhs.generics;
+        self
     }
 }

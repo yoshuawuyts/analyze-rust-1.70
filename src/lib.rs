@@ -158,7 +158,6 @@ impl Crate {
                             stability = Stability::Unstable;
                         }
                     });
-                dbg!(&trait_);
                 match db.find_traits(&[trait_.id]).into_iter().next() {
                     Some((trait_item, _)) => {
                         if let Stability::Unstable = parse_stability(&trait_item.attrs) {
@@ -556,6 +555,23 @@ pub enum Stability {
     Stable,
     /// The item is unstable
     Unstable,
+}
+impl Stability {
+    /// Returns `true` if the stability is [`Stable`].
+    ///
+    /// [`Stable`]: Stability::Stable
+    #[must_use]
+    pub fn is_stable(&self) -> bool {
+        matches!(self, Self::Stable)
+    }
+
+    /// Returns `true` if the stability is [`Unstable`].
+    ///
+    /// [`Unstable`]: Stability::Unstable
+    #[must_use]
+    pub fn is_unstable(&self) -> bool {
+        matches!(self, Self::Unstable)
+    }
 }
 
 impl std::fmt::Display for Stability {
