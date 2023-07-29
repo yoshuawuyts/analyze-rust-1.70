@@ -2,6 +2,25 @@
 
 A tool to analyze the Rust 1.70 stdlib, enabling us to ask questions about its content.
 
+## Usage
+
+```text
+analyze-rustdoc 1.0.0
+
+USAGE:
+    analyze-rustdoc <SUBCOMMAND>
+
+FLAGS:
+    -h, --help       Prints help information
+    -V, --version    Prints version information
+
+SUBCOMMANDS:
+    csv      Output a CSV
+    help     Prints this message or the help of the given subcommand(s)
+    stats    Generate an analysis
+    table    Output a table
+```
+
 ## License
 
 <sup>
