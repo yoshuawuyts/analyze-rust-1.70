@@ -8,7 +8,7 @@ use std::io;
 
 use cli_table::TableStruct;
 use rustdoc_types::{
-    GenericBound, GenericParamDefKind, Id, Term, TraitBoundModifier, Type, WherePredicate,
+    GenericBound, GenericParamDefKind, Term, TraitBoundModifier, Type, WherePredicate,
 };
 use serde::{Deserialize, Serialize};
 
@@ -53,6 +53,17 @@ impl Crate {
             output.parse_structs(&db, items, &path_name);
             output.parse_enums(&db, items, &path_name);
         }
+
+        output.traits.sort();
+        output.traits.dedup();
+        output.structs.sort();
+        output.structs.dedup();
+        output.enums.sort();
+        output.enums.dedup();
+        output.impls.sort();
+        output.impls.dedup();
+        output.functions.sort();
+        output.functions.dedup();
 
         Ok(output)
     }
@@ -234,7 +245,7 @@ impl Crate {
 }
 
 /// A trait
-#[derive(Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, PartialOrd, Ord, Eq, Serialize, Deserialize)]
 pub struct Trait {
     /// What kind of item is this?
     pub kind: &'static str,
@@ -253,7 +264,7 @@ pub struct Trait {
 }
 
 /// An enum
-#[derive(Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, PartialOrd, Serialize, Deserialize, Ord, Eq)]
 pub struct Enum {
     /// What kind of item is this?
     pub kind: &'static str,
@@ -272,7 +283,7 @@ pub struct Enum {
 }
 
 /// A struct
-#[derive(Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, PartialOrd, Serialize, Deserialize, Ord, Eq)]
 pub struct Struct {
     /// What kind of item is this?
     pub kind: &'static str,
@@ -291,7 +302,7 @@ pub struct Struct {
 }
 
 /// A function
-#[derive(Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, PartialOrd, Serialize, Deserialize, Ord, Eq)]
 pub struct Function {
     /// What kind of item is this?
     pub kind: &'static str,
@@ -310,7 +321,7 @@ pub struct Function {
 }
 
 /// A struct
-#[derive(Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, PartialOrd, Serialize, Deserialize, Ord, Eq)]
 pub struct Impl {
     /// What kind of item is this?
     pub kind: &'static str,

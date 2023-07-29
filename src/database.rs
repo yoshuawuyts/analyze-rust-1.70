@@ -32,7 +32,7 @@ impl Database {
             .filter_map(|(id, item)| match &item.inner {
                 ItemEnum::Module(module) => {
                     let path = self.find_path(id)?;
-                    Some((dbg!(path), module.clone()))
+                    Some((path, module.clone()))
                 }
                 _ => None,
             })
@@ -48,14 +48,18 @@ impl Database {
         &self,
         ids: &[rustdoc_types::Id],
     ) -> Vec<(rustdoc_types::Item, rustdoc_types::Trait)> {
-        ids.into_iter()
-            .filter_map(|id| {
-                self.find_item(id)
-                    .and_then(|item| match item.clone().inner {
-                        ItemEnum::Trait(adt) => Some((item, adt)),
-                        _ => None,
-                    })
+        fn find_trait(
+            db: &Database,
+            id: &rustdoc_types::Id,
+        ) -> Option<(rustdoc_types::Item, rustdoc_types::Trait)> {
+            db.find_item(id).and_then(|item| match item.clone().inner {
+                ItemEnum::Trait(ty) => Some((item, ty)),
+                ItemEnum::Import(import) => find_trait(db, &import.id?),
+                _ => None,
             })
+        }
+        ids.into_iter()
+            .filter_map(|id| find_trait(self, id))
             .collect()
     }
 
@@ -63,14 +67,18 @@ impl Database {
         &self,
         ids: &[rustdoc_types::Id],
     ) -> Vec<(rustdoc_types::Item, rustdoc_types::Function)> {
-        ids.into_iter()
-            .filter_map(|id| {
-                self.find_item(id)
-                    .and_then(|item| match item.clone().inner {
-                        ItemEnum::Function(fn_) => Some((item, fn_)),
-                        _ => None,
-                    })
+        fn find_function(
+            db: &Database,
+            id: &rustdoc_types::Id,
+        ) -> Option<(rustdoc_types::Item, rustdoc_types::Function)> {
+            db.find_item(id).and_then(|item| match item.clone().inner {
+                ItemEnum::Function(ty) => Some((item, ty)),
+                ItemEnum::Import(import) => find_function(db, &import.id?),
+                _ => None,
             })
+        }
+        ids.into_iter()
+            .filter_map(|id| find_function(self, id))
             .collect()
     }
 
@@ -78,28 +86,37 @@ impl Database {
         &self,
         ids: &[rustdoc_types::Id],
     ) -> Vec<(rustdoc_types::Item, rustdoc_types::Struct)> {
-        ids.into_iter()
-            .filter_map(|id| {
-                self.find_item(id)
-                    .and_then(|item| match item.clone().inner {
-                        ItemEnum::Struct(strukt) => Some((item, strukt)),
-                        _ => None,
-                    })
+        fn find_struct(
+            db: &Database,
+            id: &rustdoc_types::Id,
+        ) -> Option<(rustdoc_types::Item, rustdoc_types::Struct)> {
+            db.find_item(id).and_then(|item| match item.clone().inner {
+                ItemEnum::Struct(strukt) => Some((item, strukt)),
+                ItemEnum::Import(import) => find_struct(db, &import.id?),
+                _ => None,
             })
+        }
+        ids.into_iter()
+            .filter_map(|id| find_struct(self, id))
             .collect()
     }
+
     pub(crate) fn find_enums(
         &self,
         ids: &[rustdoc_types::Id],
     ) -> Vec<(rustdoc_types::Item, rustdoc_types::Enum)> {
-        ids.into_iter()
-            .filter_map(|id| {
-                self.find_item(id)
-                    .and_then(|item| match item.clone().inner {
-                        ItemEnum::Enum(enum_) => Some((item, enum_)),
-                        _ => None,
-                    })
+        fn find_enum(
+            db: &Database,
+            id: &rustdoc_types::Id,
+        ) -> Option<(rustdoc_types::Item, rustdoc_types::Enum)> {
+            db.find_item(id).and_then(|item| match item.clone().inner {
+                ItemEnum::Enum(enum_) => Some((item, enum_)),
+                ItemEnum::Import(import) => find_enum(db, &import.id?),
+                _ => None,
             })
+        }
+        ids.into_iter()
+            .filter_map(|id| find_enum(self, id))
             .collect()
     }
 
@@ -107,14 +124,18 @@ impl Database {
         &self,
         ids: &[rustdoc_types::Id],
     ) -> Vec<(rustdoc_types::Item, rustdoc_types::Impl)> {
-        ids.into_iter()
-            .filter_map(|id| {
-                self.find_item(id)
-                    .and_then(|item| match item.clone().inner {
-                        ItemEnum::Impl(impl_) => Some((item, impl_)),
-                        _ => None,
-                    })
+        fn find_impl(
+            db: &Database,
+            id: &rustdoc_types::Id,
+        ) -> Option<(rustdoc_types::Item, rustdoc_types::Impl)> {
+            db.find_item(id).and_then(|item| match item.clone().inner {
+                ItemEnum::Impl(impl_) => Some((item, impl_)),
+                ItemEnum::Import(import) => find_impl(db, &import.id?),
+                _ => None,
             })
+        }
+        ids.into_iter()
+            .filter_map(|id| find_impl(self, id))
             .collect()
     }
 }
