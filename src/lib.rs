@@ -55,15 +55,15 @@ impl Crate {
         }
 
         output.traits.sort();
-        output.traits.dedup();
+        output.traits.dedup_by_key(|t| t.id.clone());
         output.structs.sort();
-        output.structs.dedup();
+        output.structs.dedup_by_key(|t| t.id.clone());
         output.enums.sort();
-        output.enums.dedup();
+        output.enums.dedup_by_key(|t| t.id.clone());
         output.impls.sort();
-        output.impls.dedup();
+        output.impls.dedup_by_key(|t| t.id.clone());
         output.functions.sort();
-        output.functions.dedup();
+        output.functions.dedup_by_key(|t| t.id.clone());
 
         Ok(output)
     }
@@ -94,6 +94,7 @@ impl Crate {
 
             self.traits.push(Trait {
                 kind: "trait",
+                id: item.id.0,
                 name: trait_name.clone(),
                 has_generics,
                 path: path_name.to_string(),
@@ -120,6 +121,7 @@ impl Crate {
 
             self.structs.push(Struct {
                 kind: "struct",
+                id: item.id.0,
                 name: strukt_name.clone(),
                 has_generics,
                 path: path_name.to_string(),
@@ -142,6 +144,7 @@ impl Crate {
 
             self.enums.push(Enum {
                 kind: "enum",
+                id: item.id.0,
                 name: trait_name.clone(),
                 has_generics: contains_generics(&enum_.generics),
                 path: path_name.to_string(),
@@ -159,7 +162,7 @@ impl Crate {
         path_name: &str,
         mut stability: Stability,
     ) {
-        for (_item, impl_) in db.find_impls(items) {
+        for (item, impl_) in db.find_impls(items) {
             let has_generics = contains_generics(&impl_.generics);
 
             // We're only interested in trait impls
@@ -190,6 +193,7 @@ impl Crate {
                 let decl = format_impl(impl_);
                 self.impls.push(Impl {
                     kind: "impl",
+                    id: item.id.0,
                     name: trait_.name.clone(),
                     has_generics,
                     path: path_name.to_string(),
@@ -232,6 +236,7 @@ impl Crate {
             let function_name = item.name.unwrap();
             self.functions.push(Function {
                 kind: "function",
+                id: item.id.0,
                 name: function_name.clone(),
                 has_generics: contains_generics(&fn_.generics) || parent_has_generics,
                 path: path_name.to_owned(),
@@ -249,6 +254,8 @@ impl Crate {
 pub struct Trait {
     /// What kind of item is this?
     pub kind: &'static str,
+    /// The rustdoc ID assigned to this item
+    pub id: String,
     /// The name
     pub name: String,
     /// The path without the name
@@ -268,6 +275,8 @@ pub struct Trait {
 pub struct Enum {
     /// What kind of item is this?
     pub kind: &'static str,
+    /// The rustdoc ID assigned to this item
+    pub id: String,
     /// The name
     pub name: String,
     /// The path without the name
@@ -287,6 +296,8 @@ pub struct Enum {
 pub struct Struct {
     /// What kind of item is this?
     pub kind: &'static str,
+    /// The rustdoc ID assigned to this item
+    pub id: String,
     /// The name
     pub name: String,
     /// The path without the name
@@ -306,6 +317,8 @@ pub struct Struct {
 pub struct Function {
     /// What kind of item is this?
     pub kind: &'static str,
+    /// The rustdoc ID assigned to this item
+    pub id: String,
     /// The name
     pub name: String,
     /// The path without the name
@@ -325,6 +338,8 @@ pub struct Function {
 pub struct Impl {
     /// What kind of item is this?
     pub kind: &'static str,
+    /// The rustdoc ID assigned to this item
+    pub id: String,
     /// The name
     pub name: String,
     /// The path without the name
