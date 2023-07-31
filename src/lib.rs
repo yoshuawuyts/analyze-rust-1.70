@@ -57,17 +57,6 @@ impl Crate {
             output.parse_enums(&db, items, &path_name);
         }
 
-        output.traits.sort();
-        output.traits.dedup_by_key(|t| t.id.clone());
-        output.structs.sort();
-        output.structs.dedup_by_key(|t| t.id.clone());
-        output.enums.sort();
-        output.enums.dedup_by_key(|t| t.id.clone());
-        output.impls.sort();
-        output.impls.dedup_by_key(|t| t.id.clone());
-        output.functions.sort();
-        output.functions.dedup_by_key(|t| t.id.clone());
-
         // NOTE(yosh): okay, so this whole section is super annoying, but in
         // order to filter data later we need to know the exact path of the
         // trait we're implementing. The best way to do that is to take the
@@ -89,8 +78,19 @@ impl Crate {
                 None => format!("UNKNOWN: {}", impl_.decl),
             };
 
-            impl_.target_trait = dbg!(target_trait);
+            impl_.target_trait = target_trait;
         }
+
+        output.traits.sort();
+        output.traits.dedup_by_key(|t| t.id.clone());
+        output.structs.sort();
+        output.structs.dedup_by_key(|t| t.id.clone());
+        output.enums.sort();
+        output.enums.dedup_by_key(|t| t.id.clone());
+        output.impls.sort();
+        output.impls.dedup_by_key(|t| t.id.clone());
+        output.functions.sort();
+        output.functions.dedup_by_key(|t| t.id.clone());
 
         Ok(output)
     }
@@ -199,6 +199,7 @@ impl Crate {
         mut stability: Stability,
     ) {
         for (item, impl_) in db.find_impls(items) {
+            dbg!(&item.name);
             let has_generics = contains_generics(&impl_.generics);
 
             // We're only interested in trait impls
