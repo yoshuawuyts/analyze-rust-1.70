@@ -13,22 +13,25 @@ use rustdoc_types::{
 use serde::{Deserialize, Serialize};
 
 mod database;
+mod item;
 mod table;
+
 use database::Database;
+pub use item::Item;
 
 /// A crate
 #[derive(Debug, PartialEq, PartialOrd, Default)]
 pub struct Crate {
     /// Traits contained in this crate
-    pub traits: Vec<Trait>,
+    pub traits: Vec<item::Item>,
     /// Structs contained in this crate
-    pub structs: Vec<Struct>,
+    pub structs: Vec<item::Item>,
     /// Enums contained in this crate
-    pub enums: Vec<Enum>,
+    pub enums: Vec<item::Item>,
     /// Impls contained in this crate
-    pub impls: Vec<Impl>,
+    pub impls: Vec<item::Item>,
     /// Functions and methods contained in this crate
-    pub functions: Vec<Function>,
+    pub functions: Vec<item::Item>,
 }
 
 impl Crate {
@@ -92,11 +95,13 @@ impl Crate {
 
             let stability = parse_stability(&item.attrs);
 
-            self.traits.push(Trait {
+            self.traits.push(item::Item {
                 kind: "trait",
                 id: item.id.0,
                 name: trait_name.clone(),
                 has_generics,
+                is_const: false,
+                is_async: false,
                 path: path_name.to_string(),
                 stability,
                 fn_count,
@@ -119,10 +124,12 @@ impl Crate {
             let stability = parse_stability(&item.attrs);
             self.parse_trait_impls(db, &strukt.impls, path_name, stability);
 
-            self.structs.push(Struct {
+            self.structs.push(item::Item {
                 kind: "struct",
                 id: item.id.0,
                 name: strukt_name.clone(),
+                is_const: false,
+                is_async: false,
                 has_generics,
                 path: path_name.to_string(),
                 stability: parse_stability(&item.attrs),
@@ -142,11 +149,13 @@ impl Crate {
             let stability = parse_stability(&item.attrs);
             self.parse_trait_impls(db, &enum_.impls, path_name, stability);
 
-            self.enums.push(Enum {
+            self.enums.push(item::Item {
                 kind: "enum",
                 id: item.id.0,
                 name: trait_name.clone(),
                 has_generics: contains_generics(&enum_.generics),
+                is_const: false,
+                is_async: false,
                 path: path_name.to_string(),
                 stability,
                 fn_count,
@@ -191,11 +200,13 @@ impl Crate {
                 // TODO: this requires processing crates per section, not per crate
 
                 let decl = format_impl(impl_);
-                self.impls.push(Impl {
+                self.impls.push(item::Item {
                     kind: "impl",
                     id: item.id.0,
                     name: trait_.name.clone(),
                     has_generics,
+                    is_const: false,
+                    is_async: false,
                     path: path_name.to_string(),
                     stability,
                     fn_count: 0,
@@ -234,11 +245,13 @@ impl Crate {
         for (item, fn_) in db.find_functions(&items) {
             count += 1;
             let function_name = item.name.unwrap();
-            self.functions.push(Function {
+            self.functions.push(item::Item {
                 kind: "function",
                 id: item.id.0,
                 name: function_name.clone(),
                 has_generics: contains_generics(&fn_.generics) || parent_has_generics,
+                is_const: fn_.header.const_,
+                is_async: fn_.header.async_,
                 path: path_name.to_owned(),
                 stability: parse_stability(&item.attrs),
                 decl: format_function(&function_name, &fn_),
@@ -247,111 +260,6 @@ impl Crate {
         }
         count
     }
-}
-
-/// A trait
-#[derive(Debug, PartialEq, PartialOrd, Ord, Eq, Serialize, Deserialize)]
-pub struct Trait {
-    /// What kind of item is this?
-    pub kind: &'static str,
-    /// The rustdoc ID assigned to this item
-    pub id: String,
-    /// The name
-    pub name: String,
-    /// The path without the name
-    pub path: String,
-    /// The signature of the item
-    pub decl: String,
-    /// Does this item have generics?
-    pub has_generics: bool,
-    /// What is the stability of this item?
-    pub stability: Stability,
-    /// How many methods does this item have?
-    pub fn_count: usize,
-}
-
-/// An enum
-#[derive(Debug, PartialEq, PartialOrd, Serialize, Deserialize, Ord, Eq)]
-pub struct Enum {
-    /// What kind of item is this?
-    pub kind: &'static str,
-    /// The rustdoc ID assigned to this item
-    pub id: String,
-    /// The name
-    pub name: String,
-    /// The path without the name
-    pub path: String,
-    /// The signature of the item
-    pub decl: String,
-    /// Does this item have generics?
-    pub has_generics: bool,
-    /// What is the stability of this item?
-    pub stability: Stability,
-    /// How many methods does this item have?
-    pub fn_count: usize,
-}
-
-/// A struct
-#[derive(Debug, PartialEq, PartialOrd, Serialize, Deserialize, Ord, Eq)]
-pub struct Struct {
-    /// What kind of item is this?
-    pub kind: &'static str,
-    /// The rustdoc ID assigned to this item
-    pub id: String,
-    /// The name
-    pub name: String,
-    /// The path without the name
-    pub path: String,
-    /// The signature of the item
-    pub decl: String,
-    /// Does this item have generics?
-    pub has_generics: bool,
-    /// What is the stability of this item?
-    pub stability: Stability,
-    /// How many methods does this item have?
-    pub fn_count: usize,
-}
-
-/// A function
-#[derive(Debug, PartialEq, PartialOrd, Serialize, Deserialize, Ord, Eq)]
-pub struct Function {
-    /// What kind of item is this?
-    pub kind: &'static str,
-    /// The rustdoc ID assigned to this item
-    pub id: String,
-    /// The name
-    pub name: String,
-    /// The path without the name
-    pub path: String,
-    /// The signature of the item
-    pub decl: String,
-    /// Does this item have generics?
-    pub has_generics: bool,
-    /// What is the stability of this item?
-    pub stability: Stability,
-    /// How many methods does this item have?
-    pub fn_count: usize,
-}
-
-/// A struct
-#[derive(Debug, PartialEq, PartialOrd, Serialize, Deserialize, Ord, Eq)]
-pub struct Impl {
-    /// What kind of item is this?
-    pub kind: &'static str,
-    /// The rustdoc ID assigned to this item
-    pub id: String,
-    /// The name
-    pub name: String,
-    /// The path without the name
-    pub path: String,
-    /// The signature of the item
-    pub decl: String,
-    /// Does this item have generics?
-    pub has_generics: bool,
-    /// What is the stability of this item?
-    pub stability: Stability,
-    /// How many methods does this item have?
-    pub fn_count: usize,
 }
 
 fn contains_generics(generics: &rustdoc_types::Generics) -> bool {

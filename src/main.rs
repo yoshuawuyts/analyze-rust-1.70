@@ -1,4 +1,5 @@
 use rustdoc_denormalize::Crate;
+use rustdoc_denormalize::Item;
 use rustdoc_denormalize::Stability;
 use std::fs;
 use std::io;
@@ -84,7 +85,7 @@ fn print_stats(krate: Crate) -> Result<(), io::Error> {
     let impl_stats = Stats::from_iter(krate.impls.iter().map(|t| (t.stability, t.has_generics)));
     println!("{: <10} {impl_stats:?}", "impls");
 
-    let adt_stats = struct_stats + enum_stats;
+    let adt_stats = struct_stats.clone() + enum_stats.clone();
     println!("{: <10} {adt_stats:?}", "ADTs");
 
     println!("\n------\n");
@@ -94,14 +95,26 @@ fn print_stats(krate: Crate) -> Result<(), io::Error> {
         impl_stats.stable as f32 / adt_stats.stable as f32
     );
 
-    let const_count = analyze::const_::count_const_functions(&krate);
-    let const_ratio = (const_count as f64 / fn_stats.stable as f64) * 100.0;
-    println!("const functions: {const_count} ({const_ratio:.1}%)",);
+    count_const_stats("functions", &krate.functions, fn_stats);
+    count_const_stats("structs", &krate.structs, struct_stats);
+    count_const_stats("traits", &krate.traits, trait_stats);
+    count_const_stats("enums", &krate.enums, enum_stats);
+    count_const_stats("impls", &krate.impls, impl_stats);
 
     println!("\n------\n");
     Ok(())
 }
 
+fn count_const_stats(name: &'static str, items: &[Item], stats: Stats) {
+    let (const_count, excluded) = analyze::const_::count_const_items(items);
+    let const_maximum = stats.stable - excluded;
+    let const_max_ratio = (const_maximum as f64 / stats.stable as f64) * 100.0;
+    let const_ratio = (const_count as f64 / const_maximum as f64) * 100.0;
+    println!("potential const {name}: {const_maximum} ({const_max_ratio:.1}%)");
+    println!("currently const {name}: {const_count} ({const_ratio:.1}%)",);
+}
+
+#[derive(Clone)]
 struct Stats {
     total: usize,
     stable: usize,
