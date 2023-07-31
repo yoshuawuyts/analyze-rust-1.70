@@ -95,23 +95,40 @@ fn print_stats(krate: Crate) -> Result<(), io::Error> {
         impl_stats.stable as f32 / adt_stats.stable as f32
     );
 
-    count_const_stats("functions", &krate.functions, fn_stats);
-    count_const_stats("structs", &krate.structs, struct_stats);
-    count_const_stats("traits", &krate.traits, trait_stats);
-    count_const_stats("enums", &krate.enums, enum_stats);
-    count_const_stats("impls", &krate.impls, impl_stats);
+    count_const_stats("functions", &krate.functions, &fn_stats);
+    count_const_stats("structs", &krate.structs, &struct_stats);
+    count_const_stats("traits", &krate.traits, &trait_stats);
+    count_const_stats("enums", &krate.enums, &enum_stats);
+    count_const_stats("impls", &krate.impls, &impl_stats);
+
+    println!("\n------\n");
+
+    count_async_stats("functions", &krate.functions, &fn_stats);
+    count_async_stats("structs", &krate.structs, &struct_stats);
+    count_async_stats("traits", &krate.traits, &trait_stats);
+    count_async_stats("enums", &krate.enums, &enum_stats);
+    count_async_stats("impls", &krate.impls, &impl_stats);
 
     println!("\n------\n");
     Ok(())
 }
 
-fn count_const_stats(name: &'static str, items: &[Item], stats: Stats) {
-    let (const_count, excluded) = analyze::const_::count_const_items(items);
+fn count_const_stats(name: &str, items: &[Item], stats: &Stats) {
+    let (const_count, excluded) = analyze::count_const_items(items);
+    count_stats(name, "const", stats, excluded, const_count);
+}
+
+fn count_async_stats(name: &str, items: &[Item], stats: &Stats) {
+    let (const_count, excluded) = analyze::count_async_items(items);
+    count_stats(name, "async", stats, excluded, const_count);
+}
+
+fn count_stats(name: &str, kind: &str, stats: &Stats, excluded: usize, const_count: usize) {
     let const_maximum = stats.stable - excluded;
     let const_max_ratio = (const_maximum as f64 / stats.stable as f64) * 100.0;
     let const_ratio = (const_count as f64 / const_maximum as f64) * 100.0;
-    println!("potential const {name}: {const_maximum} ({const_max_ratio:.1}%)");
-    println!("currently const {name}: {const_count} ({const_ratio:.1}%)",);
+    println!("potential {kind} {name}: {const_maximum} ({const_max_ratio:.1}%)");
+    println!("currently {kind} {name}: {const_count} ({const_ratio:.1}%)",);
 }
 
 #[derive(Clone)]

@@ -68,6 +68,30 @@ impl Crate {
         output.functions.sort();
         output.functions.dedup_by_key(|t| t.id.clone());
 
+        // NOTE(yosh): okay, so this whole section is super annoying, but in
+        // order to filter data later we need to know the exact path of the
+        // trait we're implementing. The best way to do that is to take the
+        // already parsed traits, and find them by ID.
+        //
+        // Really, we should have just denormalized all the data so it would be
+        // trivially findable by ID beforehand. But we didn't. And I don't want
+        // to rewrite things. So instead we're just storing the ID of the
+        // implemented trait in the `impl_`, and then finding it once we're done
+        // parsing the whole thing.
+        let traits: std::collections::HashMap<_, _> = output
+            .traits
+            .iter()
+            .map(|trait_| (trait_.id.clone(), trait_.clone()))
+            .collect();
+        for impl_ in output.impls.iter_mut() {
+            let target_trait = match traits.get(&impl_.target_trait) {
+                Some(trait_) => format!("{}::{}", trait_.path, trait_.name),
+                None => format!("UNKNOWN: {}", impl_.decl),
+            };
+
+            impl_.target_trait = dbg!(target_trait);
+        }
+
         Ok(output)
     }
 
@@ -101,6 +125,7 @@ impl Crate {
                 name: trait_name.clone(),
                 has_generics,
                 is_const: false,
+                target_trait: String::new(),
                 is_async: false,
                 path: path_name.to_string(),
                 stability,
@@ -132,6 +157,7 @@ impl Crate {
                 is_async: false,
                 has_generics,
                 path: path_name.to_string(),
+                target_trait: String::new(),
                 stability: parse_stability(&item.attrs),
                 fn_count,
                 decl,
@@ -157,6 +183,7 @@ impl Crate {
                 is_const: false,
                 is_async: false,
                 path: path_name.to_string(),
+                target_trait: String::new(),
                 stability,
                 fn_count,
                 decl,
@@ -183,7 +210,7 @@ impl Crate {
                             stability = Stability::Unstable;
                         }
                     });
-                match db.find_traits(&[trait_.id]).into_iter().next() {
+                match db.find_traits(&[trait_.id.clone()]).into_iter().next() {
                     Some((trait_item, _)) => {
                         if let Stability::Unstable = parse_stability(&trait_item.attrs) {
                             stability = Stability::Unstable;
@@ -193,21 +220,19 @@ impl Crate {
                     None => {}
                 }
 
-                // NOTE: The bug here is that the item is in a separate crate!
-                // External traits can be implemented in this crate.
-
-                // TODO: we should just do a name-based lookup for traits here?
-                // TODO: this requires processing crates per section, not per crate
+                let name = trait_.name.clone();
+                let target_path = trait_.id.0;
 
                 let decl = format_impl(impl_);
                 self.impls.push(item::Item {
                     kind: "impl",
                     id: item.id.0,
-                    name: trait_.name.clone(),
+                    name,
                     has_generics,
                     is_const: false,
                     is_async: false,
                     path: path_name.to_string(),
+                    target_trait: target_path,
                     stability,
                     fn_count: 0,
                     decl,
@@ -253,6 +278,7 @@ impl Crate {
                 is_const: fn_.header.const_,
                 is_async: fn_.header.async_,
                 path: path_name.to_owned(),
+                target_trait: String::new(),
                 stability: parse_stability(&item.attrs),
                 decl: format_function(&function_name, &fn_),
                 fn_count: 0,
@@ -282,7 +308,7 @@ fn format_function(name: &str, fn_: &rustdoc_types::Function) -> String {
         return format!("<merge sort is unstable and annoyingly complicated>");
     }
     let is_const = if fn_.header.const_ { "const " } else { "" };
-    let is_unsafe = if fn_.header.const_ { "unsafe " } else { "" };
+    let is_unsafe = if fn_.header.unsafe_ { "unsafe " } else { "" };
     let is_async = if fn_.header.async_ { "async " } else { "" };
     let body = if fn_.has_body { " { .. }" } else { ";" };
     let output = match &fn_.decl.output {
@@ -470,7 +496,7 @@ fn format_impl(impl_: rustdoc_types::Impl) -> String {
     let ty = format_type(&impl_.for_);
     let params = format_generic_params(&impl_.generics.params);
     let where_bounds = format_where_bounds(&impl_.generics.where_predicates);
-    format!("{is_unsafe} impl{params} {trait_} {ty} {where_bounds} {{}}")
+    format!("{is_unsafe}impl{params} {trait_} {ty} {where_bounds} {{}}")
 }
 
 fn format_term(term: &Term) -> String {

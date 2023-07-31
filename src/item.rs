@@ -12,6 +12,8 @@ pub struct Item {
     pub name: String,
     /// The path without the name
     pub path: String,
+    /// If we're implementing a trait, which trait is it?
+    pub target_trait: String,
     /// The signature of the item
     pub decl: String,
     /// Does this item have generics?
