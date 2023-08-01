@@ -199,7 +199,6 @@ impl Crate {
         mut stability: Stability,
     ) {
         for (item, impl_) in db.find_impls(items) {
-            dbg!(&item.name);
             let has_generics = contains_generics(&impl_.generics);
 
             // We're only interested in trait impls

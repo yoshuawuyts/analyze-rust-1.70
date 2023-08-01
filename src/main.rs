@@ -103,11 +103,13 @@ fn print_stats(krate: Crate) -> Result<(), io::Error> {
 
     println!("\n------\n");
 
-    count_async_stats("functions", &krate.functions, &fn_stats);
-    count_async_stats("structs", &krate.structs, &struct_stats);
-    count_async_stats("traits", &krate.traits, &trait_stats);
-    count_async_stats("enums", &krate.enums, &enum_stats);
-    count_async_stats("impls", &krate.impls, &impl_stats);
+    count_async_stats("functions", &krate.functions, &fn_stats, |item| {
+        !item.has_generics
+    });
+    count_async_stats("structs", &krate.structs, &struct_stats, |_item| false);
+    count_async_stats("traits", &krate.traits, &trait_stats, |_item| false);
+    count_async_stats("enums", &krate.enums, &enum_stats, |_item| false);
+    count_async_stats("impls", &krate.impls, &impl_stats, |_item| false);
 
     println!("\n------\n");
     Ok(())
@@ -118,9 +120,14 @@ fn count_const_stats(name: &str, items: &[Item], stats: &Stats) {
     count_stats(name, "const", stats, excluded, const_count);
 }
 
-fn count_async_stats(name: &str, items: &[Item], stats: &Stats) {
-    let (const_count, excluded) = analyze::count_async_items(items);
-    count_stats(name, "async", stats, excluded, const_count);
+fn count_async_stats(
+    name: &str,
+    items: &[Item],
+    stats: &Stats,
+    should_exclude: impl FnMut(&&Item) -> bool,
+) {
+    let (async_count, excluded) = analyze::count_async_items(items, should_exclude);
+    count_stats(name, "async", stats, excluded, async_count);
 }
 
 fn count_stats(name: &str, kind: &str, stats: &Stats, excluded: usize, const_count: usize) {

@@ -13,7 +13,10 @@ pub fn count_const_items(items: &[Item]) -> (usize, usize) {
 // Async items are a bit trickier. We probably don't want async ops. But we
 // do want to count every single generic param. But also make sure we include
 // all of net, fs, and most traits + trait impls.
-pub fn count_async_items(items: &[Item]) -> (usize, usize) {
+pub fn count_async_items(
+    items: &[Item],
+    mut should_exclude: impl FnMut(&&Item) -> bool,
+) -> (usize, usize) {
     let exclude_paths = &[
         "core::ops",
         "std::thread",
@@ -28,8 +31,7 @@ pub fn count_async_items(items: &[Item]) -> (usize, usize) {
         "core::convert::AsMut",
         "core::cmp",
     ];
-    let should_exclude = |item: &&Item| false;
-    let count_current = |item: &&Item| item.is_async;
+    let count_current = |item: &&Item| item.is_async || item.decl.contains("Future");
     count_items(items, exclude_paths, should_exclude, count_current)
 }
 
@@ -44,7 +46,7 @@ fn count_items(
         .iter()
         .filter(|item| item.stability.is_stable())
         .filter(|item| {
-            if should_exclude_path(dbg!(&item.path), exclude_paths) {
+            if should_exclude_path(&item.path, exclude_paths) {
                 excluded += 1;
                 false
             } else if should_exclude_path(&item.target_trait, exclude_paths) {
